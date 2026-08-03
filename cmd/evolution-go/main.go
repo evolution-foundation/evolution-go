@@ -181,7 +181,6 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	)
 	instanceService := instance_service.NewInstanceService(
 		instanceRepository,
-		killChannel,
 		clientPointer,
 		whatsmeowService,
 		config,
