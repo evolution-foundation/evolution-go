@@ -165,17 +165,9 @@ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client,
 }
 
 func (i instances) signalStop(instanceID string) error {
-	stopChannel := i.killChannel[instanceID]
-	if stopChannel == nil {
-		return fmt.Errorf("instance stop channel not found")
-	}
-
-	select {
-	case stopChannel <- true:
-	default:
-		// A stop request is already queued.
-	}
-	return nil
+	// Stop channels are owned by whatsmeowService.runtimePointers/killChannel.
+	// Route through RequestStop so Disconnect/Logout stay in sync with StartInstance.
+	return i.whatsmeowService.RequestStop(instanceID)
 }
 
 func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) {
@@ -707,7 +699,7 @@ func (i instances) RemoveProxy(id string) error {
 }
 
 func (i instances) ForceReconnect(instanceId string, number string) error {
-	if client := i.clientPointer[instanceId]; client != nil && client.IsConnected() && client.IsLoggedIn() {
+	if exists, connected, loggedIn := i.whatsmeowService.ClientRuntimeState(instanceId); exists && connected && loggedIn {
 		return fmt.Errorf("client already connected")
 	}
 
@@ -720,18 +712,23 @@ func (i instances) ForceReconnect(instanceId string, number string) error {
 		return err
 	}
 
-	time.Sleep(2 * time.Second)
-
-	if client := i.clientPointer[instanceId]; client != nil {
-		if !client.IsConnected() {
-			return fmt.Errorf("failed to connect")
+	// ReconnectClient launches StartClient asynchronously. Poll the lifecycle-owned
+	// runtime state instead of the local clientPointer snapshot.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		exists, connected, loggedIn := i.whatsmeowService.ClientRuntimeState(instanceId)
+		if exists && connected && loggedIn {
+			return nil
 		}
+		time.Sleep(200 * time.Millisecond)
+	}
 
-		if !client.IsLoggedIn() {
-			return fmt.Errorf("failed to login")
-		}
-	} else {
+	exists, connected, loggedIn := i.whatsmeowService.ClientRuntimeState(instanceId)
+	if !exists || !connected {
 		return fmt.Errorf("failed to connect")
+	}
+	if !loggedIn {
+		return fmt.Errorf("failed to login")
 	}
 
 	return nil

@@ -55,6 +55,8 @@ type WhatsmeowService interface {
 	ConnectOnStartup(clientName string)
 	StartInstance(instanceId string) error
 	ReconnectClient(instanceId string) error
+	RequestStop(instanceId string) error
+	ClientRuntimeState(instanceId string) (exists bool, connected bool, loggedIn bool)
 	ClearInstanceCache(instanceId string, token string) error
 	CallWebhook(instance *instance_model.Instance, queueName string, jsonData []byte)
 	SendToGlobalQueues(event string, jsonData []byte, userId string)
@@ -296,6 +298,16 @@ func (mycli *MyClient) endReconnect() {
 	mycli.lifecycleMu.Unlock()
 }
 
+// Instance worker shutdown contract (owned by StartClient):
+//
+//  1. requestStop()   — markStopping + signal stopChannel so StartClient exits
+//                       its select loop and event handlers stop spawning work.
+//  2. closeDone()     — close mycli.done so workers blocked on <-done wake up.
+//  3. workerWG.Wait() — wait until recoverConnection/presence/QR workers finish.
+//
+// Expected order is always: requestStop → closeDone → workerWG.Wait.
+// Waiting before closeDone can deadlock; closing done before markStopping can
+// race with event handlers that still call beginReconnect/startWorker.
 func (mycli *MyClient) requestStop() {
 	mycli.markStopping()
 	select {
@@ -309,6 +321,17 @@ func (mycli *MyClient) closeDone() {
 		close(mycli.done)
 	})
 }
+
+func (mycli *MyClient) shutdownWorkers() {
+	mycli.closeDone()
+	mycli.workerWG.Wait()
+}
+
+const (
+	// Roughly one hour with the steady 30s backoff after the initial ramp.
+	maxAutomaticReconnectAttempts = 120
+	reconnectAttemptLogInterval   = 10
+)
 
 // recoverConnection reconnects the existing whatsmeow client and therefore
 // reuses the same sqlstore container. This is used only for transient websocket
@@ -330,7 +353,7 @@ func (mycli *MyClient) recoverConnection() {
 			30 * time.Second,
 		}
 
-		for attempt := 0; ; attempt++ {
+		for attempt := 0; attempt < maxAutomaticReconnectAttempts; attempt++ {
 			delay := delays[min(attempt, len(delays)-1)]
 			timer := time.NewTimer(delay)
 			select {
@@ -356,24 +379,67 @@ func (mycli *MyClient) recoverConnection() {
 				return
 			}
 
-			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Reconnecting existing client (attempt %d, next backoff up to 30s)", mycli.userID, attempt+1)
-			if err := mycli.WAClient.Connect(); err == nil {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Existing client reconnected successfully", mycli.userID)
-				return
-			} else {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Reconnect attempt %d failed: %v", mycli.userID, attempt+1, err)
+			attemptNumber := attempt + 1
+			if attemptNumber%reconnectAttemptLogInterval == 0 {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Automatic reconnect still running after %d attempts (cap=%d)", mycli.userID, attemptNumber, maxAutomaticReconnectAttempts)
 			}
 
-			// Keep retrying indefinitely while the stored device remains valid. This
-			// survives long network/database/proxy outages without creating a new
-			// whatsmeow client or a new sqlstore pool on each attempt.
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Reconnecting existing client (attempt %d/%d, next backoff up to 30s)", mycli.userID, attemptNumber, maxAutomaticReconnectAttempts)
+			if err := mycli.WAClient.Connect(); err == nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Existing client reconnected successfully after %d attempt(s)", mycli.userID, attemptNumber)
+				return
+			} else {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Reconnect attempt %d/%d failed: %v", mycli.userID, attemptNumber, maxAutomaticReconnectAttempts, err)
+			}
+
+			// Retry while the stored device remains valid, without creating a new
+			// whatsmeow client or sqlstore pool on each attempt. Operators can spot
+			// long-lived loops via the periodic warn logs and the hard attempt cap.
 			mycli.Instance.Connected = false
 			mycli.Instance.DisconnectReason = "Waiting for automatic reconnect"
 			if err := mycli.instanceRepository.UpdateConnected(mycli.userID, false, mycli.Instance.DisconnectReason); err != nil {
 				mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to persist reconnect status: %v", mycli.userID, err)
 			}
 		}
+
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Automatic reconnect stopped after %d attempts; manual reconnect or new pairing required", mycli.userID, maxAutomaticReconnectAttempts)
+		mycli.Instance.Connected = false
+		mycli.Instance.DisconnectReason = "Automatic reconnect limit reached"
+		if err := mycli.instanceRepository.UpdateConnected(mycli.userID, false, mycli.Instance.DisconnectReason); err != nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to persist reconnect limit status: %v", mycli.userID, err)
+		}
 	}()
+}
+
+// RequestStop signals the StartClient owner to shut down via the lifecycle-managed
+// stop channel. Instance-layer callers must use this instead of reading killChannel
+// directly so stop coordination stays on the whatsmeow runtime path.
+func (w whatsmeowService) RequestStop(instanceId string) error {
+	_, mycli, stopChannel := w.runtimePointers(instanceId)
+	if mycli == nil && stopChannel == nil {
+		return fmt.Errorf("instance stop channel not found")
+	}
+
+	if mycli != nil {
+		mycli.requestStop()
+		return nil
+	}
+
+	select {
+	case stopChannel <- true:
+	default:
+		// A stop request is already queued.
+	}
+	return nil
+}
+
+// ClientRuntimeState reports the current client from the lifecycle-owned maps.
+func (w whatsmeowService) ClientRuntimeState(instanceId string) (exists bool, connected bool, loggedIn bool) {
+	client, _, _ := w.runtimePointers(instanceId)
+	if client == nil {
+		return false, false, false
+	}
+	return true, client.IsConnected(), client.IsLoggedIn()
 }
 
 func (w whatsmeowService) ReconnectClient(instanceId string) error {
@@ -761,14 +827,15 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	startReleased = true
 
 	defer func() {
+		// Shutdown order: requestStop/markStopping → closeDone → workerWG.Wait.
+		// markStopping here covers exits that did not go through requestStop.
 		mycli.markStopping()
 		// Stop new event-driven workers before waiting for the workers that are
 		// already running. This avoids Add/Wait races and stale QR/reconnect jobs.
 		if mycli.eventHandlerID != 0 {
 			client.RemoveEventHandler(mycli.eventHandlerID)
 		}
-		mycli.closeDone()
-		mycli.workerWG.Wait()
+		mycli.shutdownWorkers()
 		if client.IsConnected() {
 			client.Disconnect()
 		}
