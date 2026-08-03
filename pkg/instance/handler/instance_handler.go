@@ -1,6 +1,7 @@
 package instance_handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -282,6 +283,10 @@ func (i *instanceHandler) Qr(ctx *gin.Context) {
 
 	qrcode, err := i.instanceService.GetQr(instance)
 	if err != nil {
+		if errors.Is(err, instance_service.ErrSessionAlreadyLoggedIn) {
+			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error(), "connected": true})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

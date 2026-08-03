@@ -28,6 +28,8 @@ type InstanceRepository interface {
 	UpdateJid(userId string, jid string) error
 	GetAllConnectedInstances() ([]*instance_model.Instance, error)
 	GetAllConnectedInstancesByClientName(clientName string) ([]*instance_model.Instance, error)
+	GetAllPairedInstances() ([]*instance_model.Instance, error)
+	GetAllPairedInstancesByClientName(clientName string) ([]*instance_model.Instance, error)
 	GetAll(clientName string) ([]*instance_model.Instance, error)
 	Delete(instanceId string) error
 	GetAdvancedSettings(instanceId string) (*instance_model.AdvancedSettings, error)
@@ -129,6 +131,31 @@ func (i *instanceRepository) GetAllConnectedInstances() ([]*instance_model.Insta
 func (i *instanceRepository) GetAllConnectedInstancesByClientName(clientName string) ([]*instance_model.Instance, error) {
 	var instances []*instance_model.Instance
 	err := i.db.Where("connected = ? AND client_name = ?", true, clientName).Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return instances, nil
+}
+
+// GetAllPairedInstances returns instances that have already completed pairing.
+// The Connected column is intentionally not used here: it represents the live
+// socket state and is expected to become false during a redeploy or process
+// restart. Using it as the startup selector prevents valid persisted sessions
+// from being restored after the application comes back up.
+func (i *instanceRepository) GetAllPairedInstances() ([]*instance_model.Instance, error) {
+	var instances []*instance_model.Instance
+	err := i.db.Where("jid IS NOT NULL AND TRIM(jid) <> ''").Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return instances, nil
+}
+
+func (i *instanceRepository) GetAllPairedInstancesByClientName(clientName string) ([]*instance_model.Instance, error) {
+	var instances []*instance_model.Instance
+	err := i.db.Where("jid IS NOT NULL AND TRIM(jid) <> '' AND client_name = ?", clientName).Find(&instances).Error
 	if err != nil {
 		return nil, err
 	}
