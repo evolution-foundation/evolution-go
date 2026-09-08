@@ -1223,6 +1223,24 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			}
 		}
 
+		// Trata mensagens enviadas em multi-device (celular primário / WhatsApp Web)
+		// O whatsmeow preenche evt.Info.Chat como o próprio número da empresa e armazena o lead de destino
+		// em evt.Info.DeviceSentMeta.DestinationJID.
+		var validDestJID *types.JID
+		if evt.Info.IsFromMe && evt.Info.DeviceSentMeta != nil && evt.Info.DeviceSentMeta.DestinationJID != "" {
+			if destJID, err := types.ParseJID(evt.Info.DeviceSentMeta.DestinationJID); err == nil && !destJID.IsEmpty() {
+				validDestJID = &destJID
+				if !evt.Info.IsGroup {
+					mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Outbound multi-device message detected - routing Chat from %s to DestinationJID %s",
+						mycli.userID, evt.Info.Chat.String(), destJID.String())
+					evt.Info.Chat = destJID
+				}
+			} else if err != nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to parse DestinationJID '%s': %v",
+					mycli.userID, evt.Info.DeviceSentMeta.DestinationJID, err)
+			}
+		}
+
 		// Auto-marca mensagens como lidas se configurado
 		if mycli.Instance.ReadMessages && !evt.Info.IsFromMe {
 			go func() {
@@ -1264,6 +1282,16 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		dataMap, ok := postMap["data"].(map[string]interface{})
 		if !ok {
 			dataMap = make(map[string]interface{})
+		}
+
+		if validDestJID != nil {
+			destStr := validDestJID.String()
+			dataMap["recipient"] = destStr
+			dataMap["Recipient"] = destStr
+			if !evt.Info.IsGroup {
+				dataMap["chat"] = destStr
+				dataMap["Chat"] = destStr
+			}
 		}
 
 		referral := extractReferralFromMessage(evt.Message)
