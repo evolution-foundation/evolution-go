@@ -1226,11 +1226,18 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Trata mensagens enviadas em multi-device (celular primário / WhatsApp Web)
 		// O whatsmeow preenche evt.Info.Chat como o próprio número da empresa e armazena o lead de destino
 		// em evt.Info.DeviceSentMeta.DestinationJID.
-		if evt.Info.IsFromMe && evt.Info.DeviceSentMeta != nil && evt.Info.DeviceSentMeta.DestinationJID != "" && !evt.Info.IsGroup {
+		var validDestJID *types.JID
+		if evt.Info.IsFromMe && evt.Info.DeviceSentMeta != nil && evt.Info.DeviceSentMeta.DestinationJID != "" {
 			if destJID, err := types.ParseJID(evt.Info.DeviceSentMeta.DestinationJID); err == nil && !destJID.IsEmpty() {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Outbound multi-device message detected - routing Chat from %s to DestinationJID %s",
-					mycli.userID, evt.Info.Chat.String(), destJID.String())
-				evt.Info.Chat = destJID
+				validDestJID = &destJID
+				if !evt.Info.IsGroup {
+					mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Outbound multi-device message detected - routing Chat from %s to DestinationJID %s",
+						mycli.userID, evt.Info.Chat.String(), destJID.String())
+					evt.Info.Chat = destJID
+				}
+			} else if err != nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to parse DestinationJID '%s': %v",
+					mycli.userID, evt.Info.DeviceSentMeta.DestinationJID, err)
 			}
 		}
 
@@ -1277,12 +1284,13 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			dataMap = make(map[string]interface{})
 		}
 
-		if evt.Info.IsFromMe && evt.Info.DeviceSentMeta != nil && evt.Info.DeviceSentMeta.DestinationJID != "" {
-			dataMap["recipient"] = evt.Info.DeviceSentMeta.DestinationJID
-			dataMap["Recipient"] = evt.Info.DeviceSentMeta.DestinationJID
+		if validDestJID != nil {
+			destStr := validDestJID.String()
+			dataMap["recipient"] = destStr
+			dataMap["Recipient"] = destStr
 			if !evt.Info.IsGroup {
-				dataMap["chat"] = evt.Info.Chat.String()
-				dataMap["Chat"] = evt.Info.Chat.String()
+				dataMap["chat"] = destStr
+				dataMap["Chat"] = destStr
 			}
 		}
 
