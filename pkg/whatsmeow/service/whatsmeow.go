@@ -99,6 +99,38 @@ type whatsmeowService struct {
 	passkeyCeremony    *ceremony.Store
 }
 
+// sqlstore.New abre um *sql.DB novo a cada chamada, e o pool resultante mantém
+// conexões ociosas vivas indefinidamente. Como o container era criado a cada
+// (re)conexão e nunca fechado, cada reconexão vazava conexões: numa instância de
+// produção o pool do Postgres saiu de 2 para 99 conexões ociosas ao longo de
+// alguns dias, esgotou max_connections e o cliente passou a falhar já na
+// inicialização com "pq: sorry, too many clients already" — deixando de
+// reconectar por completo.
+//
+// O DSN é fixo durante a vida do processo, então um único container por DSN
+// basta e é o que whatsmeow espera: ele é seguro para uso concorrente.
+var (
+	storeContainersMu sync.Mutex
+	storeContainers   = map[string]*sqlstore.Container{}
+)
+
+// sharedStoreContainer devolve o container já aberto para este DSN, criando-o
+// apenas na primeira chamada.
+func sharedStoreContainer(dialect, address string, log waLog.Logger) (*sqlstore.Container, error) {
+	key := dialect + "|" + address
+	storeContainersMu.Lock()
+	defer storeContainersMu.Unlock()
+	if c, ok := storeContainers[key]; ok {
+		return c, nil
+	}
+	c, err := sqlstore.New(context.Background(), dialect, address, log)
+	if err != nil {
+		return nil, err
+	}
+	storeContainers[key] = c
+	return c, nil
+}
+
 type MyClient struct {
 	service            WhatsmeowService
 	WAClient           *whatsmeow.Client
@@ -316,21 +348,15 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	var container *sqlstore.Container
 
+	var dbLog waLog.Logger
 	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
-		}
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+	if w.config.PostgresAuthDB != "" {
+		container, err = sharedStoreContainer("postgres", w.config.PostgresAuthDB, dbLog)
 	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		container, err = sharedStoreContainer("sqlite", dsn, dbLog)
 	}
 
 	if err != nil {
