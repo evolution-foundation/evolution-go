@@ -1982,12 +1982,51 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		}
 
 		// Trigger instance restart via websocket-capable service (non-blocking)
-		go func(instanceID string) {
-			mycli.loggerWrapper.GetLogger(instanceID).LogInfo("[%s] Disconnected detected, restarting instance", instanceID)
-			if err := mycli.service.ReconnectClient(instanceID); err != nil {
-				mycli.loggerWrapper.GetLogger(instanceID).LogError("[%s] Failed to restart instance: %v", instanceID, err)
-			}
-		}(mycli.userID)
+		// -- but ONLY for an already-paired device (Store.ID set). While a
+		// device is still mid-QR-pairing (Store.ID nil), handleQRCodes/
+		// teardownQR above is already the sole owner of this instance's
+		// restart lifecycle, on its own timer (60s/20s per code, 5-code
+		// max). *events.Disconnected fires routinely and repeatedly during
+		// that handshake -- WhatsApp's servers cycle the socket several
+		// times before a device is actually paired -- and ReconnectClient()
+		// unconditionally tears down and restarts from scratch ("Creating
+		// new device"), racing the still-running QR-rotation goroutine over
+		// the same unsynchronized qrcodeCount. That collapsed the real
+		// ~140s pairing window down to a few seconds every time, so a QR
+		// code never survived long enough to actually be scanned. Gating
+		// this on Store.ID keeps the auto-heal for a real mid-session drop
+		// (the case this was written for) without it also firing on every
+		// pairing-phase blip.
+		if mycli.WAClient != nil && mycli.WAClient.Store.ID != nil {
+			go func(instanceID string) {
+				mycli.loggerWrapper.GetLogger(instanceID).LogInfo("[%s] Disconnected detected, restarting instance", instanceID)
+				if err := mycli.service.ReconnectClient(instanceID); err != nil {
+					mycli.loggerWrapper.GetLogger(instanceID).LogError("[%s] Failed to restart instance: %v", instanceID, err)
+				}
+			}(mycli.userID)
+		} else if mycli.WAClient != nil {
+			// Still mid-QR-pairing. Not a no-op, though -- a genuinely dropped
+			// socket here (as opposed to the routine cycling handleQRCodes/
+			// teardownQR above already tolerates) would otherwise sit dead
+			// until the QR-max-count timeout eventually forces a restart, up
+			// to ~140s away. Reconnect the SAME client/session in place --
+			// same recovery idiom StartClient's own EOF-retry branch already
+			// uses (WAClient.Connect() again on an already-initialized
+			// client) -- rather than ReconnectClient()'s teardown-and-mint-
+			// a-new-device-identity path. This touches no shared instance
+			// maps or qrcodeCount, so it can't reintroduce the race this fix
+			// removed above.
+			go func(instanceID string) {
+				if mycli.WAClient.IsConnected() {
+					return // already recovered by the time this goroutine ran
+				}
+				if err := mycli.WAClient.Connect(); err != nil {
+					mycli.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] Reconnect attempt during QR pairing failed: %v", instanceID, err)
+				} else {
+					mycli.loggerWrapper.GetLogger(instanceID).LogInfo("[%s] Reconnected during QR pairing (same session, no device reset)", instanceID)
+				}
+			}(mycli.userID)
+		}
 	case *events.LabelEdit:
 		doWebhook = true
 		postMap["event"] = "LabelEdit"
