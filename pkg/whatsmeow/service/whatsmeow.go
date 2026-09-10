@@ -301,6 +301,101 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
+// ============================================================================
+// Backoff for the reconnect loop.
+//
+// THE LOOP: an instance whose device was logged out from the phone spins
+// forever. Disconnected -> ReconnectClient -> the instance comes up with no
+// session -> emits a QR -> nobody scans -> max QR count -> forced logout ->
+// Disconnected again. Measured in production: 110 reconnects and 1135 QR codes
+// in 50 minutes from a single instance, and it only stopped when a human looked.
+//
+// Nothing in the current code counts those restarts, because from
+// ReconnectClient's point of view every turn SUCCEEDS — the instance really does
+// come up. What fails afterwards is the pairing, which nobody was measuring.
+//
+// THE SHAPE: the first reconnectFreeAttempts restarts inside the window go
+// straight through — that is the good case, a healthy instance that lost its
+// websocket and must come back within seconds. Past that the loop turns into a
+// growing wait, and the instance keeps trying: this is a backoff, not a
+// give-up. An instance with a valid session still heals on its own; what is
+// lost is the hammering.
+//
+// NOTE: only one goroutine waits per instance (the scheduled flag). Without it
+// every Disconnected arriving during the wait would stack another one, and the
+// backoff would become the very loop it was written to stop.
+// ============================================================================
+
+const (
+	reconnectWindow       = 15 * time.Minute // restarts inside this window count together
+	reconnectFreeAttempts = 5                // how many go through with no wait
+)
+
+// The ladder of waits. The last step repeats indefinitely.
+var reconnectBackoff = []time.Duration{5 * time.Minute, 15 * time.Minute, 30 * time.Minute}
+
+type reconnectState struct {
+	restarts  int
+	since     time.Time
+	step      int
+	scheduled bool
+}
+
+var (
+	reconnectMu    sync.Mutex
+	reconnectTrack = map[string]*reconnectState{}
+)
+
+// reconnectAllowed reports whether this instance may restart right now.
+//
+//	(true, 0)   — go ahead, normal path
+//	(false, d)  — wait d and then try; this goroutine owns the wait
+//	(false, -1) — another goroutine is already waiting for this instance; give up
+func reconnectAllowed(instanceID string) (bool, time.Duration) {
+	reconnectMu.Lock()
+	defer reconnectMu.Unlock()
+
+	now := time.Now()
+	st := reconnectTrack[instanceID]
+	if st == nil || now.Sub(st.since) > reconnectWindow {
+		reconnectTrack[instanceID] = &reconnectState{restarts: 1, since: now}
+		return true, 0
+	}
+	if st.scheduled {
+		return false, -1
+	}
+	st.restarts++
+	if st.restarts <= reconnectFreeAttempts {
+		return true, 0
+	}
+
+	d := reconnectBackoff[len(reconnectBackoff)-1]
+	if st.step < len(reconnectBackoff) {
+		d = reconnectBackoff[st.step]
+		st.step++
+	}
+	st.scheduled = true
+	return false, d
+}
+
+// reconnectWaitDone puts the instance back in line once its wait is over.
+func reconnectWaitDone(instanceID string) {
+	reconnectMu.Lock()
+	if st := reconnectTrack[instanceID]; st != nil {
+		st.scheduled = false
+	}
+	reconnectMu.Unlock()
+}
+
+// reconnectSucceeded clears the state — called when the instance actually
+// connects. Without it the backoff would inherit the count of a problem that is
+// already solved.
+func reconnectSucceeded(instanceID string) {
+	reconnectMu.Lock()
+	delete(reconnectTrack, instanceID)
+	reconnectMu.Unlock()
+}
+
 func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Starting websocket connection to Whatsapp for user '%s'", cd.Instance.Id)
@@ -875,6 +970,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			}
 		}
 	case *events.Connected, *events.PushNameSetting:
+		// A real connection ends the loop, so the backoff counter dies here.
+		// Without this, a drop tomorrow would inherit today's restarts.
+		reconnectSucceeded(mycli.userID)
 		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] events.Connected to Whatsapp for user '%s'", mycli.userID, mycli.WAClient.Store.PushName)
 		if len(mycli.WAClient.Store.PushName) > 0 {
 			doWebhook = true
@@ -1984,6 +2082,20 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Trigger instance restart via websocket-capable service (non-blocking)
 		go func(instanceID string) {
 			mycli.loggerWrapper.GetLogger(instanceID).LogInfo("[%s] Disconnected detected, restarting instance", instanceID)
+
+			if allowed, wait := reconnectAllowed(instanceID); !allowed {
+				if wait < 0 {
+					mycli.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] a reconnect is already scheduled — this event will not open another", instanceID)
+					return
+				}
+				mycli.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] reconnect loop detected: more than %d restarts in %s. Next attempt in %s. If the device was logged out from the phone, only a new QR scan will fix it.", instanceID, reconnectFreeAttempts, reconnectWindow, wait)
+				if err := mycli.instanceRepository.UpdateConnected(instanceID, false, fmt.Sprintf("Reconnect backing off — next attempt in %s", wait)); err != nil {
+					mycli.loggerWrapper.GetLogger(instanceID).LogWarn("[%s] could not record the backoff reason: %v", instanceID, err)
+				}
+				time.Sleep(wait)
+				reconnectWaitDone(instanceID)
+			}
+
 			if err := mycli.service.ReconnectClient(instanceID); err != nil {
 				mycli.loggerWrapper.GetLogger(instanceID).LogError("[%s] Failed to restart instance: %v", instanceID, err)
 			}
