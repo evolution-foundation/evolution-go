@@ -1817,6 +1817,27 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		doWebhook = true
 		postMap["event"] = "Archive"
 
+		// postMap["data"] still holds the raw event at this point, so the type
+		// assertion below panicked on every Archive event. Same marshal/unmarshal
+		// step every other case in this switch already does.
+		if postMap["data"] != nil {
+			jsonBytes, err := json.Marshal(postMap["data"])
+			if err != nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to marshal postMap['data']: %v", mycli.userID, err)
+				return
+			}
+
+			var parsed map[string]interface{}
+			if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to unmarshal postMap['data'] to map[string]interface{}: %v", mycli.userID, err)
+				return
+			}
+
+			postMap["data"] = parsed
+		} else {
+			postMap["data"] = make(map[string]interface{})
+		}
+
 		dataMap := postMap["data"].(map[string]interface{})
 		dataMap["JID"] = evt.JID
 		dataMap["Timestamp"] = evt.Timestamp
