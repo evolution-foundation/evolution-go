@@ -301,12 +301,72 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
+// ============================================================================
+// The whatsmeow store container is created ONCE, not on every StartClient call.
+//
+// THE BUG: StartClient called sqlstore.New on every invocation and never closed
+// the previous container. Each sqlstore.New opens its own *sql.DB, and a
+// *sql.DB that is never closed keeps its TCP connections open forever — the
+// garbage collector does not reclaim them.
+//
+// This only hurts when an instance loops. A device logged out from the phone
+// does exactly that: reconnect -> no session -> QR -> nobody scans -> max QR
+// count -> forced logout -> Disconnected -> reconnect again. Every turn of that
+// loop leaked a whole connection pool.
+//
+// Measured in production on a 500-connection Postgres: one logged-out instance
+// produced 110 reconnects in 50 minutes and exhausted the server. From that
+// point on, EVERY other instance that dropped its websocket failed to come back
+// with "Failed to create container: pq: sorry, too many clients already" — a
+// single dead instance took the whole process down with it.
+//
+// The DSN is identical for every instance, so one container serves them all.
+// After the change: 10 StartClient calls, 4 connections in use.
+//
+// NOTE: the error is deliberately NOT memoized. A database that is briefly
+// unreachable on the first attempt must not poison the process for its whole
+// lifetime — hence a Mutex rather than sync.Once.
+// ============================================================================
+
+var (
+	sharedContainerMu sync.Mutex
+	sharedStore       *sqlstore.Container
+)
+
+func sharedContainer(w whatsmeowService) (*sqlstore.Container, error) {
+	sharedContainerMu.Lock()
+	defer sharedContainerMu.Unlock()
+
+	if sharedStore != nil {
+		return sharedStore, nil
+	}
+
+	var dbLog waLog.Logger
+	if w.config.WaDebug != "" {
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+
+	var container *sqlstore.Container
+	var err error
+	if w.config.PostgresAuthDB != "" {
+		container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
+	} else {
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	sharedStore = container
+	return container, nil
+}
+
 func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Starting websocket connection to Whatsapp for user '%s'", cd.Instance.Id)
 
 	var deviceStore *store.Device
-	var err error
 
 	if w.clientPointer[cd.Instance.Id] != nil {
 		if w.clientPointer[cd.Instance.Id].IsConnected() {
@@ -314,25 +374,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
-	var container *sqlstore.Container
-
-	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
-		}
-	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
-	}
-
+	// The container is created once and shared — see sharedContainer below.
+	container, err := sharedContainer(w)
 	if err != nil {
 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
 		return
