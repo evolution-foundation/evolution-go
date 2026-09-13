@@ -1,0 +1,36 @@
+version: '3.8'
+
+# Exemplo de deploy do evolution-go como recurso "Docker Compose" no Dokploy.
+#
+# Como funciona no Dokploy:
+# - As variáveis reais (GLOBAL_API_KEY, POSTGRES_*, AMQP_URL, etc.) NÃO ficam
+#   neste arquivo. Você as cola na aba "Environment" do recurso no Dokploy —
+#   o Dokploy grava esse conteúdo num .env ao lado deste compose, e o
+#   `env_file` abaixo injeta tudo no container.
+# - O domínio/HTTPS é configurado na aba "Domains" do recurso (serviço
+#   "evolution-go", porta = valor de SERVER_PORT). O Dokploy injeta os labels
+#   do Traefik automaticamente no deploy — não é preciso escrevê-los aqui.
+# - Postgres/RabbitMQ NÃO sobem neste compose: apontam para os serviços já
+#   existentes no host Dokploy via connection string nas env vars.
+#
+# Nomes de env var que o código realmente lê (ver pkg/config/env/env.go):
+# GLOBAL_API_KEY (não AUTHENTICATION_API_KEY), DEBUG_ENABLED (não WADEBUG),
+# LOG_TYPE (não LOGTYPE). SERVER_URL e NATS_ENABLED não existem no código.
+
+services:
+  evolution-go:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    # Alternativa: usar a imagem publicada em vez de buildar deste repo
+    # image: evoapicloud/evolution-go:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "${SERVER_PORT}"
+    volumes:
+      - evolution_go_logs:/app/logs
+
+volumes:
+  evolution_go_logs:
