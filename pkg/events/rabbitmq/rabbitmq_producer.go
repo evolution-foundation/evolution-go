@@ -125,17 +125,18 @@ func (p *rabbitMQProducer) ensureConnection() error {
 
 func (p *rabbitMQProducer) publishWithRetry(
 	channel *amqp.Channel,
-	queueName string,
+	exchange string,
+	routingKey string,
 	payload []byte,
 	userID string,
 ) error {
 	var err error
 	for i := 0; i < p.maxRetries; i++ {
 		err = channel.Publish(
-			"",        // exchange
-			queueName, // routing key
-			false,     // mandatory
-			false,     // immediate
+			exchange,   // exchange
+			routingKey, // routing key
+			false,      // mandatory
+			false,      // immediate
 			amqp.Publishing{
 				ContentType:  "application/json",
 				Body:         payload,
@@ -213,7 +214,7 @@ func (p *rabbitMQProducer) Produce(
 			return fmt.Errorf("falha ao declarar fila %s: %v", queueName, err)
 		}
 
-		err = p.publishWithRetry(channel, queueName, payload, userID)
+		err = p.publishWithRetry(channel, "", queueName, payload, userID)
 		if err != nil {
 			return fmt.Errorf("falha ao publicar mensagem após todas as tentativas: %v", err)
 		}
@@ -221,6 +222,56 @@ func (p *rabbitMQProducer) Produce(
 		p.loggerWrapper.GetLogger(userID).LogInfo("[%s] Mensagem publicada com sucesso na fila: %s", userID, queueName)
 	}
 
+	return nil
+}
+
+// ProduceToExchange publishes to a named topic exchange with a custom
+// routing key, instead of the default-exchange/queue-name publish that
+// Produce performs.
+func (p *rabbitMQProducer) ProduceToExchange(
+	exchange string,
+	routingKey string,
+	payload []byte,
+	userID string,
+) error {
+	p.loggerWrapper.GetLogger(userID).LogInfo("[%s] RabbitMQ Producer - Starting produce to exchange: %s (routing key: %s)", userID, exchange, routingKey)
+
+	if p.connStr == "" {
+		return fmt.Errorf("RabbitMQ connection string is empty - check AMQP_URL configuration")
+	}
+
+	if err := p.ensureConnection(); err != nil {
+		p.loggerWrapper.GetLogger(userID).LogError("[%s] Failed to ensure RabbitMQ connection: %v", userID, err)
+		return fmt.Errorf("falha ao garantir conexão: %v", err)
+	}
+
+	channel, err := p.conn.Channel()
+	if err != nil {
+		return fmt.Errorf("falha ao abrir canal: %v", err)
+	}
+	defer channel.Close()
+
+	if err := channel.Confirm(false); err != nil {
+		return fmt.Errorf("falha ao configurar confirms do canal: %v", err)
+	}
+
+	if err := channel.ExchangeDeclare(
+		exchange, // name
+		"topic",  // type
+		true,     // durable
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
+	); err != nil {
+		return fmt.Errorf("falha ao declarar exchange %s: %v", exchange, err)
+	}
+
+	if err := p.publishWithRetry(channel, exchange, routingKey, payload, userID); err != nil {
+		return fmt.Errorf("falha ao publicar mensagem na exchange %s após todas as tentativas: %v", exchange, err)
+	}
+
+	p.loggerWrapper.GetLogger(userID).LogInfo("[%s] Mensagem publicada com sucesso na exchange %s (routing key: %s)", userID, exchange, routingKey)
 	return nil
 }
 

@@ -73,13 +73,15 @@ type CreateStruct struct {
 }
 
 type ConnectStruct struct {
-	WebhookUrl      string   `json:"webhookUrl"`
-	Subscribe       []string `json:"subscribe"`
-	Immediate       bool     `json:"immediate"`
-	Phone           string   `json:"phone"`
-	RabbitmqEnable  string   `json:"rabbitmqEnable"`
-	WebSocketEnable string   `json:"websocketEnable"`
-	NatsEnable      string   `json:"natsEnable"`
+	WebhookUrl         string   `json:"webhookUrl"`
+	Subscribe          []string `json:"subscribe"`
+	Immediate          bool     `json:"immediate"`
+	Phone              string   `json:"phone"`
+	RabbitmqEnable     string   `json:"rabbitmqEnable"`
+	RabbitmqExchange   string   `json:"rabbitmqExchange"`
+	RabbitmqRoutingKey string   `json:"rabbitmqRoutingKey"`
+	WebSocketEnable    string   `json:"websocketEnable"`
+	NatsEnable         string   `json:"natsEnable"`
 }
 
 type StatusStruct struct {
@@ -232,6 +234,8 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	instance.Events = eventString
 	instance.Webhook = data.WebhookUrl
 	instance.RabbitmqEnable = data.RabbitmqEnable
+	instance.RabbitmqExchange = data.RabbitmqExchange
+	instance.RabbitmqRoutingKey = data.RabbitmqRoutingKey
 	instance.NatsEnable = data.NatsEnable
 	instance.WebSocketEnable = data.WebSocketEnable
 

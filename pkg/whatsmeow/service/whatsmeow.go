@@ -2284,12 +2284,29 @@ func contains(subscriptions []string, event string) bool {
 
 func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instance, queueName string, jsonData []byte) {
 	if instance.RabbitmqEnable == "enabled" || instance.RabbitmqEnable == "true" {
-		err := w.rabbitmqProducer.Produce(queueName, jsonData, instance.RabbitmqEnable, instance.Id)
-		if err != nil {
-			w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to rabbitmq: %s", instance.Id, err)
-			return
+		if instance.RabbitmqExchange != "" {
+			routingKey := instance.RabbitmqRoutingKey
+			if routingKey == "" {
+				routingKey = queueName
+			}
+			if exPub, ok := w.rabbitmqProducer.(producer_interfaces.ExchangePublisher); ok {
+				err := exPub.ProduceToExchange(instance.RabbitmqExchange, routingKey, jsonData, instance.Id)
+				if err != nil {
+					w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to rabbitmq exchange: %s", instance.Id, err)
+					return
+				}
+				w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to rabbitmq exchange %s successfully", instance.Id, instance.RabbitmqExchange)
+			} else {
+				w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] RabbitMQ producer does not support exchange publishing", instance.Id)
+			}
+		} else {
+			err := w.rabbitmqProducer.Produce(queueName, jsonData, instance.RabbitmqEnable, instance.Id)
+			if err != nil {
+				w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to rabbitmq: %s", instance.Id, err)
+				return
+			}
+			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to rabbitmq successfully", instance.Id)
 		}
-		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to rabbitmq successfully", instance.Id)
 	}
 
 	if instance.NatsEnable == "enabled" || instance.NatsEnable == "true" {
