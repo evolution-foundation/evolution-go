@@ -12,6 +12,9 @@ version: '3.8'
 #   do Traefik automaticamente no deploy — não é preciso escrevê-los aqui.
 # - Postgres/RabbitMQ NÃO sobem neste compose: apontam para os serviços já
 #   existentes no host Dokploy via connection string nas env vars.
+# - Em Dokploy < 0.30.0, recursos Compose não entram sozinhos na
+#   dokploy-network (cada compose cria a própria rede isolada), então o
+#   Traefik não alcança o serviço sem o bloco `networks` abaixo.
 #
 # Nomes de env var que o código realmente lê (ver pkg/config/env/env.go):
 # GLOBAL_API_KEY (não AUTHENTICATION_API_KEY), DEBUG_ENABLED (não WADEBUG),
@@ -31,6 +34,12 @@ services:
       - "${SERVER_PORT}"
     volumes:
       - evolution_go_logs:/app/logs
+    networks:
+      - dokploy-network
 
 volumes:
   evolution_go_logs:
+
+networks:
+  dokploy-network:
+    external: true
