@@ -69,6 +69,29 @@ type clientVersion struct {
 	Patch int
 }
 
+// store.DeviceProps.Version so descreve o device anunciado no pairing. O
+// handshake usa store.waVersion, alterado apenas por store.SetWAVersion, que
+// nunca era chamado: a versao baixada de fato era descartada e o connect
+// seguia com a versao compilada no whatsmeow, ate o WhatsApp recusar com
+// "Client outdated (405)" e nenhum QR code ser gerado.
+//
+// waVersion e global no pacote store e nao tem mutex proprio; StartClient roda
+// em goroutine por instancia, entao a escrita e serializada aqui.
+var waVersionMu sync.Mutex
+
+func applyWAVersion(v clientVersion) {
+	if v.Major == 0 && v.Minor == 0 && v.Patch == 0 {
+		return
+	}
+
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+
+	store.SetWAVersion(store.WAVersionContainer{
+		uint32(v.Major), uint32(v.Minor), uint32(v.Patch),
+	})
+}
+
 type whatsmeowService struct {
 	instanceRepository instance_repository.InstanceRepository
 	authDB             *sql.DB
@@ -383,6 +406,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		if err == nil {
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
+		applyWAVersion(version)
 	} else {
 		// Try to fetch version from WhatsApp Web
 		webVersion, err := fetchWhatsAppWebVersion()
@@ -394,6 +418,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
 			store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
+			applyWAVersion(version)
 		}
 	}
 
