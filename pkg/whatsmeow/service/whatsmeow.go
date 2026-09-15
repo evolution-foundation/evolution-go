@@ -763,6 +763,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 					}
 				} else if evt.Event == "success" {
 					w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] QR pairing ok!", cd.Instance.Id)
+					// 🔒 FIX: Parar de consumir qrChan apos o pareamento. Sem este break,
+					// um evento "code" tardio que chegasse depois do "success" (a janela de
+					// corrida existe porque o canal so fecha quando o whatsmeow decide, nao
+					// no instante do PairSuccess) incrementava mycli.qrcodeCount e podia
+					// disparar o Logout() de "Maximum QR code count reached" sobre uma sessao
+					// que tinha acabado de parear com sucesso, produzindo "the store doesn't
+					// contain a device JID" nos envios seguintes.
+					break
 				} else {
 					w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Login event: %s", cd.Instance.Id, evt.Event)
 				}
