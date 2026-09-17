@@ -87,6 +87,7 @@ type whatsmeowService struct {
 	userInfoCache      *cache.Cache
 	clientPointer      map[string]*whatsmeow.Client
 	myClientPointer    map[string]*MyClient
+	containerPointer   map[string]*sqlstore.Container
 	rabbitmqProducer   producer_interfaces.Producer
 	webhookProducer    producer_interfaces.Producer
 	websocketProducer  producer_interfaces.Producer
@@ -314,6 +315,16 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
+	// Fecha o container/pool de conexões da tentativa anterior antes de abrir um novo.
+	// Sem isso, cada reconexão (comum em quedas de websocket do WhatsApp) vazava um
+	// *sql.DB inteiro que nunca era fechado, esgotando o max_connections do Postgres.
+	if oldContainer, exists := w.containerPointer[cd.Instance.Id]; exists && oldContainer != nil {
+		if closeErr := oldContainer.Close(); closeErr != nil {
+			w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Failed to close previous container: %v", cd.Instance.Id, closeErr)
+		}
+		delete(w.containerPointer, cd.Instance.Id)
+	}
+
 	var container *sqlstore.Container
 
 	if w.config.WaDebug != "" {
@@ -337,6 +348,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
 		return
 	}
+
+	w.containerPointer[cd.Instance.Id] = container
 
 	if cd.Instance.Jid != "" {
 		jid, _ := utils.ParseJID(cd.Instance.Jid)
@@ -2773,6 +2786,15 @@ func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) er
 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client pointer cleared", instanceId)
 	}
 
+	// Fechar e limpar containerPointer (pool de conexões com o banco) se existir
+	if container, exists := w.containerPointer[instanceId]; exists && container != nil {
+		if closeErr := container.Close(); closeErr != nil {
+			w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] Failed to close container: %v", instanceId, closeErr)
+		}
+		delete(w.containerPointer, instanceId)
+		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Container pointer cleared", instanceId)
+	}
+
 	// Limpar killChannel se existir
 	if killChan, exists := w.killChannel[instanceId]; exists {
 		select {
@@ -2821,6 +2843,7 @@ func NewWhatsmeowService(
 		userInfoCache:      cache.New(5*time.Minute, 10*time.Minute),
 		clientPointer:      clientPointer,
 		myClientPointer:    make(map[string]*MyClient),
+		containerPointer:   make(map[string]*sqlstore.Container),
 		rabbitmqProducer:   rabbitmqProducer,
 		webhookProducer:    webhookProducer,
 		websocketProducer:  websocketProducer,
