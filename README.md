@@ -73,6 +73,10 @@ make setup
 cp .env.example .env
 make dev
 ```
+# Setup, configure and run for Windows (using WSL or Git Bash)
+make setup
+cp .env.example .env
+make dev
 
 > Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
 
