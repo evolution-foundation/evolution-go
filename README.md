@@ -68,11 +68,15 @@ make docker-run
 git clone https://github.com/evolution-foundation/evolution-go.git
 cd evolution-go
 
-# Setup, configure and run
+# Setup, configure and run 
 make setup
 cp .env.example .env
 make dev
 ```
+# Setup, configure and run for windows 
+make setup
+copy .env.example .env
+make dev
 
 > Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
 
