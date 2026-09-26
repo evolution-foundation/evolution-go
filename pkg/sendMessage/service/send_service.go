@@ -655,19 +655,21 @@ func (s *sendService) sendTextWithRetry(data *TextStruct, instance *instance_mod
 	return nil, fmt.Errorf("failed to send text after %d attempts", maxRetries)
 }
 
-func fetchLinkMetadata(url string) (string, string, string, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", "", "", err
-	}
-	defer resp.Body.Close()
-
-	doc, err := html.Parse(resp.Body)
+// fetchLinkMetadata reads the preview metadata of a page: og:title (falling
+// back to <title>), the description and og:image. The image URL is resolved
+// against the page URL, since some sites declare it as a relative path.
+func fetchLinkMetadata(pageURL string) (string, string, string, error) {
+	body, err := fetchLinkPreviewResource(pageURL, linkPreviewMaxHTMLBytes)
 	if err != nil {
 		return "", "", "", err
 	}
 
-	var title, description, imgURL string
+	doc, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return "", "", "", err
+	}
+
+	var title, ogTitle, description, imgURL string
 
 	var f func(*html.Node)
 	f = func(n *html.Node) {
@@ -684,6 +686,10 @@ func fetchLinkMetadata(url string) (string, string, string, error) {
 					if attr.Key == "content" {
 						content = attr.Val
 					}
+				}
+
+				if property == "og:title" && content != "" {
+					ogTitle = content
 				}
 
 				if (property == "description" || property == "og:description") && content != "" {
@@ -703,7 +709,10 @@ func fetchLinkMetadata(url string) (string, string, string, error) {
 
 	f(doc)
 
-	return title, description, imgURL, nil
+	if ogTitle != "" {
+		title = ogTitle
+	}
+	return title, description, absoluteURL(pageURL, imgURL), nil
 }
 
 func (s *sendService) SendLink(data *LinkStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
@@ -711,10 +720,14 @@ func (s *sendService) SendLink(data *LinkStruct, instance *instance_model.Instan
 }
 
 func (s *sendService) sendLinkWithRetry(data *LinkStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
+	// The preview (metadata, image download, thumbnail upload) is built once
+	// and reused by the retries below.
+	var msg *waE2E.Message
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendLink attempt %d/%d", instance.Id, attempt, maxRetries)
 
-		_, err := s.ensureClientConnectedWithRetry(instance.Id, 2)
+		client, err := s.ensureClientConnectedWithRetry(instance.Id, 2)
 		if err != nil {
 			if attempt == maxRetries {
 				return nil, err
@@ -722,45 +735,8 @@ func (s *sendService) sendLinkWithRetry(data *LinkStruct, instance *instance_mod
 			continue
 		}
 
-		matchedText := findURL(data.Text)
-
-		if matchedText != "" {
-			title, description, imgUrl, err := fetchLinkMetadata(matchedText)
-			if err != nil {
-				if attempt == maxRetries {
-					return nil, err
-				}
-				continue
-			}
-
-			data.Title = title
-			data.Description = description
-			data.ImgUrl = imgUrl
-		}
-
-		var fileData []byte
-		if data.ImgUrl != "" {
-			resp, err := http.Get(data.ImgUrl)
-			if err != nil {
-				if attempt == maxRetries {
-					return nil, err
-				}
-				continue
-			}
-			defer resp.Body.Close()
-			fileData, _ = io.ReadAll(resp.Body)
-		}
-
-		previewType := waE2E.ExtendedTextMessage_VIDEO
-		msg := &waE2E.Message{
-			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-				Text:          &data.Text,
-				Title:         &data.Title,
-				MatchedText:   &matchedText,
-				JPEGThumbnail: fileData,
-				Description:   &data.Description,
-				PreviewType:   &previewType,
-			},
+		if msg == nil {
+			msg = s.buildLinkMessage(client, data, instance.Id)
 		}
 
 		message, err := s.SendMessage(instance, msg, "ExtendedTextMessage", &SendDataStruct{
