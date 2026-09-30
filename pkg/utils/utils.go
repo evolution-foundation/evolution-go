@@ -145,45 +145,12 @@ func formatMXOrARNumber(jid string) string {
 	return jid
 }
 
-// formatBRNumber formats Brazilian (55) numbers according to the mobile number rules
+// formatBRNumber formats Brazilian (55) numbers according to the mobile number rules.
+// Note: Brazilian mobile numbers nationwide carry 9 digits (13 digits with country code 55 and DDD).
+// Previously, the 9th digit was unconditionally removed for DDD >= 31, which broke messaging for modern
+// WhatsApp accounts registered natively with 9 digits (causing "number not registered on WhatsApp" errors).
+// The 13-digit format is now preserved.
 func formatBRNumber(jid string) string {
-	// Only process if it's exactly 13 digits and starts with "55"
-	if len(jid) != 13 || !strings.HasPrefix(jid, "55") {
-		return jid
-	}
-
-	// Extract DDD (area code) - should be between 11-99 for Brazil
-	ddd := jid[2:4]
-
-	// Convert DDD to integer for validation
-	dddNum, err := strconv.Atoi(ddd)
-	if err != nil {
-		return jid
-	}
-
-	// Brazilian DDD codes are between 11-99, if it's outside this range, it's not Brazil
-	if dddNum < 11 || dddNum > 99 {
-		return jid
-	}
-
-	// Extract the first digit after DDD
-	if len(jid) < 6 {
-		return jid
-	}
-
-	firstDigit := jid[4:5]
-	firstDigitNum, err := strconv.Atoi(firstDigit)
-	if err != nil {
-		return jid
-	}
-
-	// Check if it's a mobile number (9 prefix) and DDD >= 31
-	if firstDigitNum >= 7 && dddNum >= 31 {
-		// Remove the 9 prefix for mobile numbers with DDD >= 31
-		return jid[:4] + jid[5:]
-	}
-
-	// Keep the number as is (landline or special case)
 	return jid
 }
 
