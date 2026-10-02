@@ -116,7 +116,9 @@ type ForceReconnectStruct struct {
 
 func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
 	logger := i.loggerWrapper.GetLogger(instanceId)
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := i.clientPointer[instanceId]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 	logger.LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -130,7 +132,9 @@ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client,
 		logger.LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = i.clientPointer[instanceId]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		logger.LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -234,7 +238,9 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	}
 
 	// Verifica se a instância já está rodando
+	whatsmeow_service.ClientMapsMu.RLock()
 	isInstanceRunning := i.clientPointer[instance.Id] != nil
+	whatsmeow_service.ClientMapsMu.RUnlock()
 
 	// Sincroniza as configurações na instância em execução (se já estiver conectada)
 	err = i.whatsmeowService.UpdateInstanceSettings(instance.Id)
@@ -250,7 +256,9 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	if !isInstanceRunning {
 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Starting new client instance", instance.Id)
 
+		whatsmeow_service.ClientMapsMu.Lock()
 		i.killChannel[instance.Id] = make(chan bool)
+		whatsmeow_service.ClientMapsMu.Unlock()
 
 		clientData := &whatsmeow_service.ClientData{
 			Instance:      instance,
@@ -309,7 +317,10 @@ func (i instances) Disconnect(instance *instance_model.Instance) (*instance_mode
 	if client.IsConnected() {
 		if client.IsLoggedIn() {
 			i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Disconnection successful", instance.Id)
-			i.killChannel[instance.Id] <- true
+			whatsmeow_service.ClientMapsMu.RLock()
+			killChan := i.killChannel[instance.Id]
+			whatsmeow_service.ClientMapsMu.RUnlock()
+			killChan <- true
 
 			instance.Events = ""
 
@@ -344,13 +355,18 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
 			return instance, err
 		}
 
+		whatsmeow_service.ClientMapsMu.RLock()
+		logoutKillChan := i.killChannel[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		select {
-		case i.killChannel[instance.Id] <- true:
+		case logoutKillChan <- true:
 		case <-time.After(5 * time.Second):
 		}
 
+		whatsmeow_service.ClientMapsMu.Lock()
 		delete(i.clientPointer, instance.Id)
 		delete(i.killChannel, instance.Id)
+		whatsmeow_service.ClientMapsMu.Unlock()
 
 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Logout successful", instance.Id)
 		return instance, nil
@@ -359,13 +375,18 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
 	if client.IsConnected() {
 		client.Disconnect()
 
+		whatsmeow_service.ClientMapsMu.RLock()
+		disconnectKillChan := i.killChannel[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		select {
-		case i.killChannel[instance.Id] <- true:
+		case disconnectKillChan <- true:
 		case <-time.After(5 * time.Second):
 		}
 
+		whatsmeow_service.ClientMapsMu.Lock()
 		delete(i.clientPointer, instance.Id)
 		delete(i.killChannel, instance.Id)
+		whatsmeow_service.ClientMapsMu.Unlock()
 
 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Disconnection successful", instance.Id)
 		return instance, nil
@@ -376,7 +397,9 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
 }
 
 func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, error) {
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 
 	if client == nil {
 		return &StatusStruct{
@@ -405,7 +428,9 @@ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, err
 
 func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, error) {
 	logger := i.loggerWrapper.GetLogger(instance.Id)
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 
 	// Se não há cliente ou o cliente está logado, precisamos iniciar um novo cliente
 	if client == nil || client.IsLoggedIn() {
@@ -427,7 +452,9 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
 		time.Sleep(3 * time.Second)
 
 		// Verificar novamente se há cliente
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = i.clientPointer[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		if client != nil && client.IsLoggedIn() {
 			return nil, fmt.Errorf("session already logged in")
 		}
@@ -474,7 +501,9 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
 
 func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*PairReturnStruct, error) {
 	logger := i.loggerWrapper.GetLogger(instance.Id)
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 
 	if client == nil || !client.IsConnected() {
 		if client != nil && client.IsLoggedIn() {
@@ -488,7 +517,9 @@ func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*P
 		// Wait for the WA websocket connection and initial QR generation to establish.
 		// PairPhone must be called after the QR event is received per whatsmeow docs.
 		time.Sleep(3 * time.Second)
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = i.clientPointer[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		if client == nil {
 			return nil, fmt.Errorf("failed to initialize client for pairing")
 		}
@@ -514,7 +545,10 @@ func (i instances) GetAll() ([]*instance_model.Instance, error) {
 	}
 
 	for _, instance := range instances {
-		if client := i.clientPointer[instance.Id]; client != nil {
+		whatsmeow_service.ClientMapsMu.RLock()
+		client := i.clientPointer[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
+		if client != nil {
 			instance.Connected = client.IsLoggedIn()
 		} else {
 			instance.Connected = false
@@ -533,7 +567,10 @@ func (i instances) Info(instanceId string) (*instance_model.Instance, error) {
 	}
 
 	// Atualiza o status connected com base no estado real do cliente
-	if client := i.clientPointer[instance.Id]; client != nil {
+	whatsmeow_service.ClientMapsMu.RLock()
+	client := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
+	if client != nil {
 		instance.Connected = client.IsLoggedIn()
 	} else {
 		instance.Connected = false
@@ -550,18 +587,30 @@ func (i instances) Delete(id string) error {
 		return err
 	}
 
-	if i.clientPointer[instance.Id] != nil && i.clientPointer[instance.Id].IsConnected() {
-		if i.clientPointer[instance.Id].IsLoggedIn() {
-			i.clientPointer[instance.Id].Logout(context.Background())
+	whatsmeow_service.ClientMapsMu.RLock()
+	deleteClient := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
+
+	if deleteClient != nil && deleteClient.IsConnected() {
+		if deleteClient.IsLoggedIn() {
+			deleteClient.Logout(context.Background())
 		}
-		i.clientPointer[instance.Id].Disconnect()
+		deleteClient.Disconnect()
 	}
 
-	// Limpar todos os recursos da instância antes de deletar
+	// Limpar todos os recursos da instância antes de deletar. Read-then-delete
+	// on killChannel happens under the same Lock as the clientPointer delete so
+	// a concurrent Delete()/cleanup can't double-close the channel.
+	whatsmeow_service.ClientMapsMu.Lock()
 	delete(i.clientPointer, instance.Id)
-	if i.killChannel[instance.Id] != nil {
-		close(i.killChannel[instance.Id])
+	deleteKillChan := i.killChannel[instance.Id]
+	if deleteKillChan != nil {
 		delete(i.killChannel, instance.Id)
+	}
+	whatsmeow_service.ClientMapsMu.Unlock()
+
+	if deleteKillChan != nil {
+		close(deleteKillChan)
 	}
 
 	// Limpar cache via whatsmeow service
@@ -660,7 +709,10 @@ func (i instances) RemoveProxy(id string) error {
 }
 
 func (i instances) ForceReconnect(instanceId string, number string) error {
-	if i.clientPointer[instanceId].IsConnected() && i.clientPointer[instanceId].IsLoggedIn() {
+	whatsmeow_service.ClientMapsMu.RLock()
+	forceReconnectClient := i.clientPointer[instanceId]
+	whatsmeow_service.ClientMapsMu.RUnlock()
+	if forceReconnectClient.IsConnected() && forceReconnectClient.IsLoggedIn() {
 		return fmt.Errorf("client already connected")
 	}
 
@@ -676,7 +728,9 @@ func (i instances) ForceReconnect(instanceId string, number string) error {
 
 	subscribedEvents := strings.Split(instance.Events, ",")
 
+	whatsmeow_service.ClientMapsMu.Lock()
 	i.killChannel[instance.Id] = make(chan bool)
+	whatsmeow_service.ClientMapsMu.Unlock()
 
 	clientData := &whatsmeow_service.ClientData{
 		Instance:      instance,
@@ -698,29 +752,41 @@ func (i instances) ForceReconnect(instanceId string, number string) error {
 		}
 	}
 
-	if i.clientPointer[instance.Id] != nil {
-		client := i.clientPointer[instance.Id]
-		client.Disconnect()
+	whatsmeow_service.ClientMapsMu.RLock()
+	existingForceReconnectClient := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 
+	if existingForceReconnectClient != nil {
+		existingForceReconnectClient.Disconnect()
+
+		whatsmeow_service.ClientMapsMu.RLock()
+		forceReconnectKillChan := i.killChannel[instance.Id]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		select {
-		case i.killChannel[instance.Id] <- true:
+		case forceReconnectKillChan <- true:
 		case <-time.After(5 * time.Second):
 		}
 
+		whatsmeow_service.ClientMapsMu.Lock()
 		delete(i.clientPointer, instance.Id)
 		delete(i.killChannel, instance.Id)
+		whatsmeow_service.ClientMapsMu.Unlock()
 	}
 
 	go i.whatsmeowService.StartClient(clientData)
 
 	time.Sleep(2 * time.Second)
 
-	if i.clientPointer[instance.Id] != nil {
-		if !i.clientPointer[instance.Id].IsConnected() {
+	whatsmeow_service.ClientMapsMu.RLock()
+	newForceReconnectClient := i.clientPointer[instance.Id]
+	whatsmeow_service.ClientMapsMu.RUnlock()
+
+	if newForceReconnectClient != nil {
+		if !newForceReconnectClient.IsConnected() {
 			return fmt.Errorf("failed to connect")
 		}
 
-		if !i.clientPointer[instance.Id].IsLoggedIn() {
+		if !newForceReconnectClient.IsLoggedIn() {
 			return fmt.Errorf("failed to login")
 		}
 	} else {
