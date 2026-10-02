@@ -532,7 +532,7 @@ func (u *userService) SetProfileStatus(data *SetProfileStatusStruct, instance *i
 		return false, err
 	}
 
-	err = client.SetStatusMessage(context.Background(), data.Status)
+	err = client.SetStatusMessage(context.Background(), types.SetStatusInput{Text: &data.Status})
 	if err != nil {
 		return false, err
 	}

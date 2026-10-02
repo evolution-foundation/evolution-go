@@ -69,6 +69,29 @@ type clientVersion struct {
 	Patch int
 }
 
+// store.DeviceProps.Version so descreve o device anunciado no pairing. O
+// handshake usa store.waVersion, alterado apenas por store.SetWAVersion, que
+// nunca era chamado: a versao baixada de fato era descartada e o connect
+// seguia com a versao compilada no whatsmeow, ate o WhatsApp recusar com
+// "Client outdated (405)" e nenhum QR code ser gerado.
+//
+// waVersion e global no pacote store e nao tem mutex proprio; StartClient roda
+// em goroutine por instancia, entao a escrita e serializada aqui.
+var waVersionMu sync.Mutex
+
+func applyWAVersion(v clientVersion) {
+	if v.Major == 0 && v.Minor == 0 && v.Patch == 0 {
+		return
+	}
+
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+
+	store.SetWAVersion(store.WAVersionContainer{
+		uint32(v.Major), uint32(v.Minor), uint32(v.Patch),
+	})
+}
+
 type whatsmeowService struct {
 	instanceRepository instance_repository.InstanceRepository
 	authDB             *sql.DB
@@ -279,12 +302,46 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
+// O sqlstore.Container abre o proprio pool database/sql e roda a checagem de
+// migracao do schema na criacao. Criar um por chamada de StartClient vazava um
+// pool a cada reinicio de cliente: uma instancia nao pareada, que reinicia
+// sozinha no loop de QR, esgotava o max_connections do Postgres em minutos.
+// O container e seguro para uso concorrente, entao uma unica instancia atende
+// todos os clientes pelo tempo de vida do processo.
+var (
+	sharedStoreContainer     *sqlstore.Container
+	sharedStoreContainerErr  error
+	sharedStoreContainerOnce sync.Once
+)
+
+func (w whatsmeowService) storeContainer() (*sqlstore.Container, error) {
+	sharedStoreContainerOnce.Do(func() {
+		var dbLog waLog.Logger
+		if w.config.WaDebug != "" {
+			dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+		}
+
+		if w.config.PostgresAuthDB != "" {
+			sharedStoreContainer, sharedStoreContainerErr = sqlstore.New(
+				context.Background(), "postgres", w.config.PostgresAuthDB, dbLog,
+			)
+			return
+		}
+
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		sharedStoreContainer, sharedStoreContainerErr = sqlstore.New(
+			context.Background(), "sqlite", dsn, dbLog,
+		)
+	})
+
+	return sharedStoreContainer, sharedStoreContainerErr
+}
+
 func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Starting websocket connection to Whatsapp for user '%s'", cd.Instance.Id)
 
 	var deviceStore *store.Device
-	var err error
 
 	if w.clientPointer[cd.Instance.Id] != nil {
 		if w.clientPointer[cd.Instance.Id].IsConnected() {
@@ -292,25 +349,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
-	var container *sqlstore.Container
-
-	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
-		}
-	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
-	}
-
+	container, err := w.storeContainer()
 	if err != nil {
 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
 		return
@@ -367,6 +406,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		if err == nil {
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
+		applyWAVersion(version)
 	} else {
 		// Try to fetch version from WhatsApp Web
 		webVersion, err := fetchWhatsAppWebVersion()
@@ -378,6 +418,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
 			store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
+			applyWAVersion(version)
 		}
 	}
 
@@ -722,6 +763,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 					}
 				} else if evt.Event == "success" {
 					w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] QR pairing ok!", cd.Instance.Id)
+					// 🔒 FIX: Parar de consumir qrChan apos o pareamento. Sem este break,
+					// um evento "code" tardio que chegasse depois do "success" (a janela de
+					// corrida existe porque o canal so fecha quando o whatsmeow decide, nao
+					// no instante do PairSuccess) incrementava mycli.qrcodeCount e podia
+					// disparar o Logout() de "Maximum QR code count reached" sobre uma sessao
+					// que tinha acabado de parear com sucesso, produzindo "the store doesn't
+					// contain a device JID" nos envios seguintes.
+					break
 				} else {
 					w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Login event: %s", cd.Instance.Id, evt.Event)
 				}
