@@ -69,6 +69,11 @@ type clientVersion struct {
 	Patch int
 }
 
+// sharedContainerKey é a única chave usada em containerPointer — o
+// container do sqlstore é compartilhado entre TODAS as instâncias (mesmo
+// PostgresAuthDB/DSN pra todas), então não faz sentido um por instância.
+const sharedContainerKey = "shared"
+
 type whatsmeowService struct {
 	instanceRepository instance_repository.InstanceRepository
 	authDB             *sql.DB
@@ -80,15 +85,23 @@ type whatsmeowService struct {
 	userInfoCache      *cache.Cache
 	clientPointer      map[string]*whatsmeow.Client
 	myClientPointer    map[string]*MyClient
-	rabbitmqProducer   producer_interfaces.Producer
-	webhookProducer    producer_interfaces.Producer
-	websocketProducer  producer_interfaces.Producer
-	sqliteDB           *sql.DB
-	exPath             string
-	mediaStorage       storage_interfaces.MediaStorage
-	processedMessages  *cache.Cache
-	natsProducer       producer_interfaces.Producer
-	loggerWrapper      *logger_wrapper.LoggerManager
+	containerPointer   map[string]*sqlstore.Container
+	// Ponteiro, não valor: StartClient (e a maioria dos métodos deste
+	// struct) usa value receiver, então um sync.Mutex embutido por valor
+	// seria copiado a cada chamada e perderia a exclusão mútua entre
+	// goroutines concorrentes (apontado pelo `go vet`: "passes lock by
+	// value"). Um ponteiro continua apontando pro mesmo mutex mesmo
+	// depois da cópia — mesmo padrão já usado por authDB (*sql.DB) etc.
+	containerInitMu   *sync.Mutex
+	rabbitmqProducer  producer_interfaces.Producer
+	webhookProducer   producer_interfaces.Producer
+	websocketProducer producer_interfaces.Producer
+	sqliteDB          *sql.DB
+	exPath            string
+	mediaStorage      storage_interfaces.MediaStorage
+	processedMessages *cache.Cache
+	natsProducer      producer_interfaces.Producer
+	loggerWrapper     *logger_wrapper.LoggerManager
 }
 
 type MyClient struct {
@@ -292,23 +305,41 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
-	var container *sqlstore.Container
-
-	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
+	// Reusa um único *sqlstore.Container compartilhado entre todas as
+	// instâncias e todas as tentativas de reconexão, em vez de abrir um
+	// container/pool novo a cada chamada de StartClient. Antes, toda
+	// reconexão (inclusive o auto-reconnect interno "attempt 1/2, 2/2")
+	// chamava sqlstore.New(...) de novo, que abre um *sql.DB novo via
+	// sql.Open — o container anterior nunca era fechado (nenhum
+	// container.Close() em todo o arquivo), então cada ciclo de
+	// reconexão deixava um pool inteiro (até 25 conexões, pelo limite
+	// que o próprio sqlstore.New já configura) pendurado no Postgres.
+	// Com uso frequente de reconexão isso esgota max_connections mesmo
+	// com o limite alto. Container é seguro pra reusar entre instâncias:
+	// é o mesmo banco/DSN (PostgresAuthDB) pra todas, e o cache abaixo
+	// funciona corretamente mesmo com StartClient usando value receiver
+	// porque containerPointer é um map (tipo referência), igual ao
+	// clientPointer já existente.
+	container := w.containerPointer[sharedContainerKey]
+	if container == nil {
+		w.containerInitMu.Lock()
+		container = w.containerPointer[sharedContainerKey]
+		if container == nil {
+			var dbLog waLog.Logger
+			if w.config.WaDebug != "" {
+				dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+			}
+			if w.config.PostgresAuthDB != "" {
+				container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
+			} else {
+				dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+				container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
+			}
+			if err == nil {
+				w.containerPointer[sharedContainerKey] = container
+			}
 		}
-	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
+		w.containerInitMu.Unlock()
 	}
 
 	if err != nil {
@@ -1577,17 +1608,17 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			buttonClickMap := map[string]interface{}{
 				"event": "ButtonClick",
 				"data": map[string]interface{}{
-					"buttonId":     buttonClickData["buttonId"],
-					"buttonText":   buttonClickData["buttonText"],
-					"type":         buttonClickData["type"],
-					"phone":        dataMap["Sender"],
-					"jid":          dataMap["Sender"],
-					"pushName":     dataMap["PushName"],
-					"messageId":    dataMap["ID"],
-					"chat":         dataMap["Chat"],
-					"fromMe":       dataMap["FromMe"],
-					"timestamp":    evt.Info.Timestamp.Unix(),
-					"extraData":    buttonClickData,
+					"buttonId":   buttonClickData["buttonId"],
+					"buttonText": buttonClickData["buttonText"],
+					"type":       buttonClickData["type"],
+					"phone":      dataMap["Sender"],
+					"jid":        dataMap["Sender"],
+					"pushName":   dataMap["PushName"],
+					"messageId":  dataMap["ID"],
+					"chat":       dataMap["Chat"],
+					"fromMe":     dataMap["FromMe"],
+					"timestamp":  evt.Info.Timestamp.Unix(),
+					"extraData":  buttonClickData,
 				},
 				"instanceToken": mycli.token,
 				"instanceId":    mycli.userID,
@@ -2677,6 +2708,8 @@ func NewWhatsmeowService(
 		userInfoCache:      cache.New(5*time.Minute, 10*time.Minute),
 		clientPointer:      clientPointer,
 		myClientPointer:    make(map[string]*MyClient),
+		containerPointer:   make(map[string]*sqlstore.Container),
+		containerInitMu:    &sync.Mutex{},
 		rabbitmqProducer:   rabbitmqProducer,
 		webhookProducer:    webhookProducer,
 		websocketProducer:  websocketProducer,
