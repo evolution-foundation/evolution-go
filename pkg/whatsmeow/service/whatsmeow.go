@@ -294,21 +294,29 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	var container *sqlstore.Container
 
+	var dbLog waLog.Logger
 	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+
+	if w.config.PostgresAuthDB != "" && w.authDB != nil {
+		// Reuse the already-pooled, bounded authDB connection (SetMaxOpenConns/SetMaxIdleConns
+		// are configured once in config.CreateAuthDB) instead of opening a brand new *sql.DB via
+		// sqlstore.New on every StartClient call. StartClient runs on every reconnect, including
+		// the kill-channel restart path, so calling sqlstore.New here leaked one unbounded
+		// connection pool per call (see issue #175).
+		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
+		if err = container.Upgrade(context.Background()); err != nil {
+			w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to upgrade container: %v", cd.Instance.Id, err)
+			return
 		}
+	} else if w.config.PostgresAuthDB != "" {
+		// authDB should always be set when PostgresAuthDB is configured (see main.go), but fall
+		// back to the old per-call behavior rather than panicking on a nil *sql.DB.
+		container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
 	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
 	}
 
 	if err != nil {
