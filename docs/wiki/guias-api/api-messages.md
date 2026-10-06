@@ -21,6 +21,7 @@ Documentação completa dos endpoints para enviar e gerenciar mensagens WhatsApp
 - [Marcar como Lida](#marcar-como-lida)
 - [Editar Mensagem](#editar-mensagem)
 - [Deletar Mensagem](#deletar-mensagem)
+- [Encaminhar Mensagem](#encaminhar-mensagem)
 - [Presença no Chat](#presença-no-chat)
 - [Download de Mídia](#download-de-mídia)
 - [Status da Mensagem](#status-da-mensagem)
@@ -928,6 +929,121 @@ curl -X POST http://localhost:4000/message/delete \
   -d '{
     "chat": "5511999999999@s.whatsapp.net",
     "messageId": "3EB0C5A277F7F9B6C599"
+  }'
+```
+
+---
+
+### Encaminhar Mensagem
+
+Encaminha uma mensagem existente para outro chat, com o rótulo **"Encaminhada"** exibido no destinatário (igual ao encaminhamento nativo do WhatsApp).
+
+**Endpoint**: `POST /message/forward`
+
+**Body**:
+```json
+{
+  "number": "5511999999999",
+  "message": {
+    "extendedTextMessage": {
+      "text": "Texto da mensagem original"
+    }
+  },
+  "id": "msg-custom-123",
+  "delay": 1000,
+  "formatJid": true,
+  "forwardingScore": 1
+}
+```
+
+**Parâmetros**:
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `number` | string | ✅ Sim | Destino do encaminhamento (usuário, grupo `@g.us` ou newsletter) |
+| `message` | object | ✅ Sim | Payload completo da mensagem original (`waE2E.Message`) — o objeto `data.Message` recebido no webhook ou retornado pelos endpoints `/send/*` |
+| `id` | string | ❌ Não | ID customizado para a cópia encaminhada |
+| `delay` | int32 | ❌ Não | Delay em milissegundos ("digitando...") antes de enviar |
+| `formatJid` | bool | ❌ Não | Formatar número automaticamente (padrão: true) |
+| `forwardingScore` | uint32 | ❌ Não | Sobrescreve o score calculado (padrão: score original + 1; valores ≥ 5 exibem "Encaminhada muitas vezes") |
+
+**Como funciona**:
+
+- O `message` deve ser enviado **exatamente como recebido** no webhook (`data.Message`) ou no response de um `/send/*`. O endpoint clona o payload, descarta o contexto antigo (citações/menções do chat de origem) e carimba `isForwarded: true` + `forwardingScore`.
+- **Mídia é encaminhada por referência** (`mediaKey`/`directPath` reaproveitados), sem download nem re-upload — por isso é importante enviar o objeto de mídia completo (`URL`, `mediaKey`, `directPath`, `fileSHA256` etc.).
+- Tipos suportados: texto (`conversation`/`extendedTextMessage`), imagem, vídeo, PTV, áudio, documento, sticker, localização, contato, enquete, lista, botões e interactive.
+- Mensagens **view-once** (visualização única) não podem ser encaminhadas (retorna erro).
+
+**Resposta de Sucesso (200)**: mesmo formato dos endpoints `/send/*`:
+```json
+{
+  "message": "success",
+  "data": {
+    "Info": {
+      "ID": "3EB0C5A277F7F9B6C599",
+      "Timestamp": "2025-11-11T10:30:00Z",
+      "Type": "ExtendedTextMessage"
+    },
+    "Message": {
+      "extendedTextMessage": {
+        "text": "Texto da mensagem original",
+        "contextInfo": {
+          "forwardingScore": 1,
+          "isForwarded": true
+        }
+      }
+    }
+  }
+}
+```
+
+**Respostas de Erro (400)**:
+```json
+{ "error": "phone number is required" }
+```
+```json
+{ "error": "message payload is required" }
+```
+```json
+{ "error": "view-once messages cannot be forwarded" }
+```
+```json
+{ "error": "unsupported message type for forwarding" }
+```
+
+**Exemplo cURL (texto)**:
+```bash
+curl -X POST http://localhost:4000/message/forward \
+  -H "Content-Type: application/json" \
+  -H "apikey: SUA-CHAVE-API" \
+  -d '{
+    "number": "5511999999999",
+    "message": {
+      "extendedTextMessage": {
+        "text": "Teste encaminhamento 1"
+      }
+    }
+  }'
+```
+
+**Exemplo cURL (imagem recebida via webhook)**:
+```bash
+curl -X POST http://localhost:4000/message/forward \
+  -H "Content-Type: application/json" \
+  -H "apikey: SUA-CHAVE-API" \
+  -d '{
+    "number": "5511888888888",
+    "message": {
+      "imageMessage": {
+        "URL": "https://mmg.whatsapp.net/...",
+        "mimetype": "image/jpeg",
+        "fileSHA256": "...",
+        "fileLength": 12345,
+        "mediaKey": "...",
+        "fileEncSHA256": "...",
+        "directPath": "/v/..."
+      }
+    }
   }'
 ```
 

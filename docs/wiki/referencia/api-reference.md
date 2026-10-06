@@ -41,7 +41,7 @@ http://localhost:4000
 
 ---
 
-### Mensagens (16 endpoints)
+### Mensagens (17 endpoints)
 
 **Envio:**
 - `POST /send/text` - Mensagem de texto
@@ -59,6 +59,7 @@ http://localhost:4000
 - `POST /message/markread` - Marcar como lida
 - `POST /message/edit` - Editar mensagem
 - `POST /message/delete` - Deletar mensagem
+- `POST /message/forward` - Encaminhar mensagem (com rótulo "Encaminhada")
 - `POST /message/presence` - Status de presença (digitando/gravando)
 - `POST /message/downloadmedia` - Download de mídia
 - `POST /message/status` - Status de entrega/leitura
@@ -179,6 +180,6 @@ http://localhost:4000
 
 ---
 
-**Total de endpoints disponíveis: 79**
+**Total de endpoints disponíveis: 80**
 
 **Documentação Evolution GO v1.0**
