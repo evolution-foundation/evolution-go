@@ -375,6 +375,10 @@ func (m *messageService) DeleteMessageEveryone(data *MessageStruct, instance *in
 		m.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating message fields", instance.Id)
 		return "", "", errors.New("invalid phone number")
 	}
+	// The chat JID lands inside the revoke's protocolMessage Key: with the "+"
+	// prefix CreateJID adds, receiving devices look up a chat that doesn't
+	// exist and silently ignore the revoke. See utils.CanonicalJID.
+	recipient = utils.CanonicalJID(recipient)
 
 	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Revoking message %s from %s", data.MessageID, recipient)
 
@@ -403,6 +407,9 @@ func (m *messageService) EditMessage(data *EditMessageStruct, instance *instance
 		m.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating message fields", instance.Id)
 		return "", "", errors.New("invalid phone number")
 	}
+	// Same as DeleteMessageEveryone: the JID lands inside the edit's
+	// protocolMessage Key, so the "+" prefix makes recipients ignore it.
+	recipient = utils.CanonicalJID(recipient)
 
 	resp, err := client.SendMessage(
 		context.Background(),

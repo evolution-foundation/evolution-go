@@ -335,6 +335,10 @@ func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.
 	if !ok {
 		return nil, errors.New("invalid phone number")
 	}
+	// GetProfilePictureInfo runs a usync IQ against the JID as-is; the "+"
+	// prefix CreateJID adds to phone numbers makes it query a nonexistent user
+	// and time out (~75s). See utils.CanonicalJID.
+	jid = utils.CanonicalJID(jid)
 
 	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Requesting avatar for JID: %s, Preview: %v", instance.Id, jid, data.Preview)
 
