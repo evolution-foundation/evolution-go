@@ -407,12 +407,20 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
 	logger := i.loggerWrapper.GetLogger(instance.Id)
 	client := i.clientPointer[instance.Id]
 
-	// Se não há cliente ou o cliente está logado, precisamos iniciar um novo cliente
-	if client == nil || client.IsLoggedIn() {
-		if client != nil && client.IsLoggedIn() {
-			logger.LogInfo("[%s] Client is logged in, starting new instance for QR code", instance.Id)
-		} else {
+	// Se o cliente já está logado, NÃO reiniciar — apenas informar. Chamar StartInstance
+	// numa sessão logada derruba o whatsmeow (Disconnected → novo QR), o que pode ser
+	// disparado por polling do frontend logo após PairSuccess, quebrando a conexão.
+	if client != nil && client.IsLoggedIn() {
+		logger.LogInfo("[%s] Client is already logged in — returning 'session already logged in' (StartInstance skipped to avoid disconnect)", instance.Id)
+		return nil, fmt.Errorf("session already logged in")
+	}
+
+	// Se não há cliente OU cliente sem sessão logada, iniciar/reiniciar para gerar QR
+	if client == nil || (!client.IsConnected() && !client.IsLoggedIn()) {
+		if client == nil {
 			logger.LogInfo("[%s] No client found, starting new instance for QR code", instance.Id)
+		} else {
+			logger.LogInfo("[%s] Client exists but not connected/logged, restarting for QR code", instance.Id)
 		}
 
 		// Iniciar nova instância para gerar QR code
