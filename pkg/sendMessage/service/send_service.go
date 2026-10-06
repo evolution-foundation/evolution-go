@@ -3,6 +3,7 @@ package send_service
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,7 @@ type SendService interface {
 	SendPoll(data *PollStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendSticker(data *StickerStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendLocation(data *LocationStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
+	SendEvent(data *EventStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendContact(data *ContactStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendButton(data *ButtonStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
 	SendList(data *ListStruct, instance *instance_model.Instance) (*MessageSendStruct, error)
@@ -149,6 +151,86 @@ type LocationStruct struct {
 	MentionAll   bool         `json:"mentionAll"`
 	FormatJid    *bool        `json:"formatJid,omitempty"`
 	Quoted       QuotedStruct `json:"quoted"`
+}
+
+// EventTime accepts epoch seconds (number or string) OR an ISO 8601 (RFC3339)
+// timestamp with timezone, and normalizes everything to epoch seconds.
+type EventTime int64
+
+func (t *EventTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		return nil
+	}
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		*t = EventTime(n)
+		return nil
+	}
+	if tm, err := time.Parse(time.RFC3339, s); err == nil {
+		*t = EventTime(tm.Unix())
+		return nil
+	}
+	return fmt.Errorf("invalid time %q: use ISO 8601 (RFC3339) or epoch seconds", s)
+}
+
+// Unix returns the time as epoch seconds.
+func (t EventTime) Unix() int64 { return int64(t) }
+
+// EventLocationStruct is the optional location attached to an event.
+type EventLocationStruct struct {
+	Name      string  `json:"name,omitempty" example:"Sede Grupo Mirandas"`
+	Latitude  float64 `json:"latitude,omitempty" example:"-16.6869"`
+	Longitude float64 `json:"longitude,omitempty" example:"-49.2648"`
+	Address   string  `json:"address,omitempty" example:"Av. Principal, 1000"`
+}
+
+// EventStruct is the body for POST /send/event.
+//
+// Sends a WhatsApp Event (group agenda). `startTime`/`endTime` accept either an
+// ISO 8601 (RFC3339) string with timezone or epoch seconds (number or string).
+// Only `number`, `name` and `startTime` are required.
+type EventStruct struct {
+	// Destination JID (typically a group, e.g. 1203...@g.us).
+	Number string `json:"number" example:"120363000000000000@g.us"`
+	// Event title (required).
+	Name string `json:"name" example:"Reuniao de vendas"`
+	// Optional long description.
+	Description string `json:"description,omitempty"`
+	// Optional text message sent right before the event card (acts like a
+	// caption). The WhatsApp event has no caption field, so when set this is
+	// delivered as a separate text message first, then the event card. Respects
+	// mentionAll/mentionedJid/delay.
+	Text string `json:"text,omitempty"`
+	// Event start (required). ISO 8601 with timezone or epoch seconds.
+	StartTime EventTime `json:"startTime" swaggertype:"string" example:"2026-06-25T20:00:00-03:00"`
+	// Optional event end. ISO 8601 with timezone or epoch seconds.
+	EndTime EventTime `json:"endTime,omitempty" swaggertype:"string"`
+	// Optional location (name + coordinates + address).
+	Location *EventLocationStruct `json:"location,omitempty"`
+	// Optional call link (Meet, Zoom, etc.).
+	JoinLink string `json:"joinLink,omitempty"`
+	// Allow guests to invite extra guests.
+	ExtraGuestsAllowed bool `json:"extraGuestsAllowed,omitempty"`
+	// Whether this event is a scheduled call.
+	IsScheduleCall bool `json:"isScheduleCall,omitempty"`
+	// Enable a reminder for the event.
+	HasReminder bool `json:"hasReminder,omitempty"`
+	// Seconds before startTime to fire the reminder (requires hasReminder).
+	ReminderOffsetSec int64 `json:"reminderOffsetSec,omitempty"`
+	// Cancel a previously created event.
+	IsCanceled bool `json:"isCanceled,omitempty"`
+	// Optional custom message ID.
+	Id string `json:"id,omitempty"`
+	// Typing delay (milliseconds) before sending.
+	Delay int32 `json:"delay,omitempty"`
+	// JIDs to mention inside the event.
+	MentionedJID []string `json:"mentionedJid,omitempty"`
+	// Mention every participant (groups only).
+	MentionAll bool `json:"mentionAll,omitempty"`
+	// If false, skips JID formatting/validation of `number`.
+	FormatJid *bool `json:"formatJid,omitempty"`
+	// Quoted (reply-to) context.
+	Quoted QuotedStruct `json:"quoted,omitempty"`
 }
 
 type ContactStruct struct {
@@ -1638,6 +1720,85 @@ func (s *sendService) SendLocation(data *LocationStruct, instance *instance_mode
 	return message, nil
 }
 
+func (s *sendService) SendEvent(data *EventStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
+	_, err := s.ensureClientConnected(instance.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Optional leading text message — the WhatsApp EventMessage has no caption
+	// field, so when `text` is set it is delivered as a separate text message
+	// right before the event card (same number, mentions and delay).
+	if data.Text != "" {
+		if _, err := s.SendText(&TextStruct{
+			Number:       data.Number,
+			Text:         data.Text,
+			Delay:        data.Delay,
+			MentionAll:   data.MentionAll,
+			MentionedJID: data.MentionedJID,
+			FormatJid:    data.FormatJid,
+		}, instance); err != nil {
+			return nil, fmt.Errorf("failed to send event text: %w", err)
+		}
+	}
+
+	event := &waE2E.EventMessage{
+		Name:      proto.String(data.Name),
+		StartTime: proto.Int64(data.StartTime.Unix()),
+	}
+	if data.Description != "" {
+		event.Description = proto.String(data.Description)
+	}
+	if data.EndTime.Unix() > 0 {
+		event.EndTime = proto.Int64(data.EndTime.Unix())
+	}
+	if data.JoinLink != "" {
+		event.JoinLink = proto.String(data.JoinLink)
+	}
+	// The official WhatsApp client always sends these booleans explicitly on
+	// creation; the server expects them present (a nil *bool is dropped from the
+	// wire and the event is silently discarded), so set them unconditionally.
+	event.IsCanceled = proto.Bool(data.IsCanceled)
+	event.IsScheduleCall = proto.Bool(data.IsScheduleCall)
+	event.ExtraGuestsAllowed = proto.Bool(data.ExtraGuestsAllowed)
+	if data.HasReminder {
+		event.HasReminder = proto.Bool(true)
+		if data.ReminderOffsetSec > 0 {
+			event.ReminderOffsetSec = proto.Int64(data.ReminderOffsetSec)
+		}
+	}
+	if data.Location != nil {
+		event.Location = &waE2E.LocationMessage{
+			DegreesLatitude:  proto.Float64(data.Location.Latitude),
+			DegreesLongitude: proto.Float64(data.Location.Longitude),
+			Name:             proto.String(data.Location.Name),
+			Address:          proto.String(data.Location.Address),
+		}
+	}
+
+	// MessageSecret (32 bytes) is required so event responses (going/not_going)
+	// can be decrypted by the server — same pattern whatsmeow uses in BuildPollCreation.
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, fmt.Errorf("failed to generate event message secret: %w", err)
+	}
+
+	msg := &waE2E.Message{
+		EventMessage:       event,
+		MessageContextInfo: &waE2E.MessageContextInfo{MessageSecret: secret},
+	}
+
+	return s.SendMessage(instance, msg, "EventMessage", &SendDataStruct{
+		Id:           data.Id,
+		Number:       data.Number,
+		Quoted:       data.Quoted,
+		Delay:        data.Delay,
+		MentionAll:   data.MentionAll,
+		MentionedJID: data.MentionedJID,
+		FormatJid:    data.FormatJid,
+	})
+}
+
 func (s *sendService) SendContact(data *ContactStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	_, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
@@ -2127,6 +2288,12 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 				Participant:   proto.String(data.Quoted.Participant),
 				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
 			}
+		case "EventMessage":
+			msg.EventMessage.ContextInfo = &waE2E.ContextInfo{
+				StanzaID:      proto.String(data.Quoted.MessageID),
+				Participant:   proto.String(data.Quoted.Participant),
+				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			}
 		case "ContactMessage":
 			msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{
 				StanzaID:      proto.String(data.Quoted.MessageID),
@@ -2181,6 +2348,8 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 			msg.StickerMessage.ContextInfo = &waE2E.ContextInfo{}
 		case "LocationMessage":
 			msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{}
+		case "EventMessage":
+			msg.EventMessage.ContextInfo = &waE2E.ContextInfo{}
 		case "ContactMessage":
 			msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{}
 		case "InteractiveMessage":
@@ -2254,6 +2423,11 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 					msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{}
 				}
 				msg.LocationMessage.ContextInfo.MentionedJID = mentionedJIDs
+			case "EventMessage":
+				if msg.EventMessage.ContextInfo == nil {
+					msg.EventMessage.ContextInfo = &waE2E.ContextInfo{}
+				}
+				msg.EventMessage.ContextInfo.MentionedJID = mentionedJIDs
 			case "ContactMessage":
 				if msg.ContactMessage.ContextInfo == nil {
 					msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{}
@@ -2310,6 +2484,11 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 					msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{}
 				}
 				msg.LocationMessage.ContextInfo.MentionedJID = data.MentionedJID
+			case "EventMessage":
+				if msg.EventMessage.ContextInfo == nil {
+					msg.EventMessage.ContextInfo = &waE2E.ContextInfo{}
+				}
+				msg.EventMessage.ContextInfo.MentionedJID = data.MentionedJID
 			case "ContactMessage":
 				if msg.ContactMessage.ContextInfo == nil {
 					msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{}

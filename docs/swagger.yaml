@@ -592,6 +592,92 @@ definitions:
       vcard:
         $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_utils.VCardStruct'
     type: object
+  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventLocationStruct:
+    properties:
+      address:
+        example: Av. Principal, 1000
+        type: string
+      latitude:
+        example: -16.6869
+        type: number
+      longitude:
+        example: -49.2648
+        type: number
+      name:
+        example: Sede Grupo Mirandas
+        type: string
+    type: object
+  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventStruct:
+    properties:
+      delay:
+        description: Typing delay (milliseconds) before sending.
+        type: integer
+      description:
+        description: Optional long description.
+        type: string
+      endTime:
+        description: Optional event end. ISO 8601 with timezone or epoch seconds.
+        type: string
+      extraGuestsAllowed:
+        description: Allow guests to invite extra guests.
+        type: boolean
+      formatJid:
+        description: If false, skips JID formatting/validation of `number`.
+        type: boolean
+      hasReminder:
+        description: Enable a reminder for the event.
+        type: boolean
+      id:
+        description: Optional custom message ID.
+        type: string
+      isCanceled:
+        description: Cancel a previously created event.
+        type: boolean
+      isScheduleCall:
+        description: Whether this event is a scheduled call.
+        type: boolean
+      joinLink:
+        description: Optional call link (Meet, Zoom, etc.).
+        type: string
+      location:
+        allOf:
+        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventLocationStruct'
+        description: Optional location (name + coordinates + address).
+      mentionAll:
+        description: Mention every participant (groups only).
+        type: boolean
+      mentionedJid:
+        description: JIDs to mention inside the event.
+        items:
+          type: string
+        type: array
+      name:
+        description: Event title (required).
+        example: Reuniao de vendas
+        type: string
+      number:
+        description: Destination JID (typically a group, e.g. 1203...@g.us).
+        example: 120363000000000000@g.us
+        type: string
+      quoted:
+        allOf:
+        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        description: Quoted (reply-to) context.
+      reminderOffsetSec:
+        description: Seconds before startTime to fire the reminder (requires hasReminder).
+        type: integer
+      startTime:
+        description: Event start (required). ISO 8601 with timezone or epoch seconds.
+        example: "2026-06-25T20:00:00-03:00"
+        type: string
+      text:
+        description: |-
+          Optional text message sent right before the event card (acts like a
+          caption). The WhatsApp event has no caption field, so when set this is
+          delivered as a separate text message first, then the event card. Respects
+          mentionAll/mentionedJid/delay.
+        type: string
+    type: object
   github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.LinkStruct:
     properties:
       delay:
@@ -8309,6 +8395,38 @@ paths:
           schema:
             $ref: '#/definitions/gin.H'
       summary: Send a contact message
+      tags:
+      - Send Message
+  /send/event:
+    post:
+      consumes:
+      - application/json
+      description: Create and send a WhatsApp Event (group agenda). startTime/endTime
+        accept an ISO 8601 (RFC3339) timestamp with timezone or epoch seconds. Typically
+        sent to a group JID, e.g. 1203...@g.us.
+      parameters:
+      - description: Event data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventStruct'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            $ref: '#/definitions/gin.H'
+        "400":
+          description: Error on validation
+          schema:
+            $ref: '#/definitions/gin.H'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/gin.H'
+      summary: Send a WhatsApp event message
       tags:
       - Send Message
   /send/link:

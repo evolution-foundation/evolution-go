@@ -2567,6 +2567,52 @@
                 }
             }
         },
+        "/send/event": {
+            "post": {
+                "description": "Create and send a WhatsApp Event (group agenda). startTime/endTime accept an ISO 8601 (RFC3339) timestamp with timezone or epoch seconds. Typically sent to a group JID, e.g. 1203...@g.us.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Send Message"
+                ],
+                "summary": "Send a WhatsApp event message",
+                "parameters": [
+                    {
+                        "description": "Event data",
+                        "name": "message",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventStruct"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    },
+                    "400": {
+                        "description": "Error on validation",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    }
+                }
+            }
+        },
         "/send/link": {
             "post": {
                 "description": "Send a link message",
@@ -4340,6 +4386,122 @@
                 },
                 "vcard": {
                     "$ref": "#/definitions/github_com_EvolutionAPI_evolution-go_pkg_utils.VCardStruct"
+                }
+            }
+        },
+        "github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventLocationStruct": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "Av. Principal, 1000"
+                },
+                "latitude": {
+                    "type": "number",
+                    "example": -16.6869
+                },
+                "longitude": {
+                    "type": "number",
+                    "example": -49.2648
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Sede Grupo Mirandas"
+                }
+            }
+        },
+        "github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventStruct": {
+            "type": "object",
+            "properties": {
+                "delay": {
+                    "description": "Typing delay (milliseconds) before sending.",
+                    "type": "integer"
+                },
+                "description": {
+                    "description": "Optional long description.",
+                    "type": "string"
+                },
+                "endTime": {
+                    "description": "Optional event end. ISO 8601 with timezone or epoch seconds.",
+                    "type": "string"
+                },
+                "extraGuestsAllowed": {
+                    "description": "Allow guests to invite extra guests.",
+                    "type": "boolean"
+                },
+                "formatJid": {
+                    "description": "If false, skips JID formatting/validation of `number`.",
+                    "type": "boolean"
+                },
+                "hasReminder": {
+                    "description": "Enable a reminder for the event.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "Optional custom message ID.",
+                    "type": "string"
+                },
+                "isCanceled": {
+                    "description": "Cancel a previously created event.",
+                    "type": "boolean"
+                },
+                "isScheduleCall": {
+                    "description": "Whether this event is a scheduled call.",
+                    "type": "boolean"
+                },
+                "joinLink": {
+                    "description": "Optional call link (Meet, Zoom, etc.).",
+                    "type": "string"
+                },
+                "location": {
+                    "description": "Optional location (name + coordinates + address).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.EventLocationStruct"
+                        }
+                    ]
+                },
+                "mentionAll": {
+                    "description": "Mention every participant (groups only).",
+                    "type": "boolean"
+                },
+                "mentionedJid": {
+                    "description": "JIDs to mention inside the event.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "description": "Event title (required).",
+                    "type": "string",
+                    "example": "Reuniao de vendas"
+                },
+                "number": {
+                    "description": "Destination JID (typically a group, e.g. 1203...@g.us).",
+                    "type": "string",
+                    "example": "120363000000000000@g.us"
+                },
+                "quoted": {
+                    "description": "Quoted (reply-to) context.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct"
+                        }
+                    ]
+                },
+                "reminderOffsetSec": {
+                    "description": "Seconds before startTime to fire the reminder (requires hasReminder).",
+                    "type": "integer"
+                },
+                "startTime": {
+                    "description": "Event start (required). ISO 8601 with timezone or epoch seconds.",
+                    "type": "string",
+                    "example": "2026-06-25T20:00:00-03:00"
+                },
+                "text": {
+                    "description": "Optional text message sent right before the event card (acts like a\ncaption). The WhatsApp event has no caption field, so when set this is\ndelivered as a separate text message first, then the event card. Respects\nmentionAll/mentionedJid/delay.",
+                    "type": "string"
                 }
             }
         },

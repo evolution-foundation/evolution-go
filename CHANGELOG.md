@@ -5,6 +5,7 @@
 **Docker:** `evoapicloud/evolution-go:0.7.1`
 
 ### 🆕 New Features
+- **Send Event endpoint** — new `POST /send/event` creates and sends a WhatsApp Event (group agenda). Body supports `name`, `description`, `startTime`/`endTime` (ISO 8601 with timezone or epoch seconds), optional `location`, `hasReminder`/`reminderOffsetSec` (e.g. `900`=15min, `3600`=1h, `86400`=1 day), `isScheduleCall`, `extraGuestsAllowed`, `isCanceled`, `mentionAll`/`mentionedJid`, and an optional `text` delivered as a leading message right before the event card (caption-style). The flag booleans are always sent explicitly (the WhatsApp client requires them present) and a 32-byte `MessageContextInfo` secret is set so the event's going/not-going responses decrypt. Note: `joinLink` only accepts WhatsApp call links (`call.whatsapp.com`); external URLs (site/YouTube) should go in `description`. Requires the matching event-stanza support in the bundled `whatsmeow` (`type=event` + `<meta event_type="creation">`).
 - **Test-send modal in Manager** — new modal in the embedded manager UI to test message sending directly from the panel, covering text, media and interactive message types. Useful for validating an instance right after pairing without leaving the manager.
 
 ### 🔧 Improvements / CI

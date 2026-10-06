@@ -726,6 +726,33 @@
           "response": []
         },
         {
+          "name": "Send Event",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"number\": \"120363000000000000@g.us\",\r\n    \"name\": \"Sales meeting\",\r\n    \"description\": \"Monthly alignment. External links (site/YouTube) go in this field.\",\r\n    \"text\": \"📢 Reminder! Confirm your presence in the event below 👇\",\r\n    \"startTime\": \"2026-06-25T20:00:00-03:00\",\r\n    \"endTime\": \"2026-06-25T21:00:00-03:00\",\r\n    \"location\": {\r\n        \"name\": \"HQ\",\r\n        \"latitude\": -16.6869,\r\n        \"longitude\": -49.2648,\r\n        \"address\": \"Av. Principal, 1000\"\r\n    },\r\n    \"hasReminder\": true,\r\n    \"reminderOffsetSec\": 3600,\r\n    \"mentionAll\": true\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{host}}/send/event",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "send",
+                "event"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Send Contact",
           "request": {
             "method": "POST",
