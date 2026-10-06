@@ -1032,6 +1032,11 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		postMap["event"] = "Message"
 		// Message received
 
+		// Secret-encrypted edits (secretEncryptedMessage MESSAGE_EDIT) become a
+		// cleartext protocolMessage when the original message's secret is known
+		// — see secret_edit.go.
+		mycli.resolveSecretEncryptedEdit(evt)
+
 		// Log message arrival with detailed info
 		messageSize := "unknown"
 		if evt.Message.GetDocumentMessage() != nil && evt.Message.GetDocumentMessage().FileLength != nil {
