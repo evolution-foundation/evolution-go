@@ -441,7 +441,7 @@ Envia eventos através de uma conexão WebSocket persistente. Ideal para dashboa
 
 ### Características
 
-- **Conexão bidirecional**: Comunicação em duas vias
+- **Eventos do servidor**: O cliente recebe eventos; mensagens enviadas pelo cliente são descartadas
 - **Baixa latência**: Perfeito para interfaces em tempo real
 - **Gerenciamento seguro**: Múltiplas conexões simultâneas
 - **Dois modos**: Broadcast (todos os eventos) ou específico por instância
@@ -453,33 +453,47 @@ Envia eventos através de uma conexão WebSocket persistente. Ideal para dashboa
 Recebe apenas eventos de uma instância:
 
 ```
-ws://localhost:4000/ws?token=TOKEN_DA_INSTANCIA&instanceId=vendas
+ws://localhost:8080/ws?token=GLOBAL_API_KEY&instanceId=UUID_DA_INSTANCIA
 ```
+
+Nos dois modos, `/ws` exige a chave global (`GLOBAL_API_KEY`), inclusive quando
+`instanceId` está presente. Use o UUID retornado pela criação da instância, não
+seu nome. Ajuste a porta conforme `SERVER_PORT` (o `.env.example` usa `8080`).
 
 #### 2. Conexão Broadcast
 
 Recebe eventos de **todas as instâncias**:
 
 ```
-ws://localhost:4000/ws?token=GLOBAL_API_KEY
+ws://localhost:8080/ws?token=GLOBAL_API_KEY
 ```
 
 ### Gerenciamento de Conexões
 
 O Evolution GO gerencia automaticamente as conexões WebSocket:
 
-- **Conexões específicas**: Cada instância pode ter sua própria conexão
+- **Conexões específicas**: Uma conexão ativa por instância; uma nova conexão substitui e fecha a anterior
 - **Conexões broadcast**: Recebem eventos de todas as instâncias
-- **Desconexão automática**: Detecta e remove conexões inativas
-- **Thread-safe**: Múltiplas conexões podem ser gerenciadas simultaneamente
+- **Limpeza automática**: Desconexões e falhas de escrita removem e fecham a conexão correspondente, sem remover uma reconexão mais recente
+- **Escritas serializadas**: Eventos concorrentes compartilham um único writer por conexão
+- **Prazo de escrita**: Cada escrita tem prazo de 10 segundos; uma falha ou timeout fecha o socket e exige uma nova conexão
+- **Registro independente do envio**: Um cliente lento não mantém o registro global bloqueado durante operações de rede
+
+A entrega é por tentativa, sem fila persistente, repetição automática ou replay
+após reconectar. Uma falha não interrompe as tentativas para os demais destinatários
+do mesmo evento. `Produce` retorna erro quando algum envio falha, mesmo que outros
+clientes tenham recebido o evento; repetir toda a publicação pode duplicá-lo.
+No despacho da instância, uma falha de WebSocket é registrada e o webhook
+configurado continua sendo tentado, sem repetir a publicação WebSocket.
+O formato permanece `{ "queue": "nome-em-minusculas", "payload": "JSON como string" }`.
 
 ### Cliente JavaScript
 
 ```javascript
 // Conectar a instância específica
-const token = 'token-da-instancia-vendas';
-const instanceId = 'vendas';
-const ws = new WebSocket(`ws://localhost:4000/ws?token=${token}&instanceId=${instanceId}`);
+const token = 'GLOBAL_API_KEY';
+const instanceId = 'UUID_DA_INSTANCIA';
+const ws = new WebSocket(`ws://localhost:8080/ws?token=${encodeURIComponent(token)}&instanceId=${encodeURIComponent(instanceId)}`);
 
 ws.onopen = () => {
     console.log('WebSocket conectado!');
@@ -518,7 +532,7 @@ import websockets
 import json
 
 async def listen_events():
-    uri = "ws://localhost:4000/ws?token=TOKEN&instanceId=vendas"
+    uri = "ws://localhost:8080/ws?token=GLOBAL_API_KEY&instanceId=UUID_DA_INSTANCIA"
     
     async with websockets.connect(uri) as websocket:
         print("WebSocket conectado!")

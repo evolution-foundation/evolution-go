@@ -2305,9 +2305,11 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 		err := w.websocketProducer.Produce(queueName, jsonData, instance.Id, instance.Token)
 		if err != nil {
 			w.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Failed to send message to websocket: %s", instance.Id, err)
-			return
+			// WebSocket failure may be partial delivery. Do not retry it or skip
+			// the independent webhook destination.
+		} else {
+			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to websocket successfully", instance.Id)
 		}
-		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to websocket successfully", instance.Id)
 	}
 
 	if instance.Webhook != "" && instance.Webhook != "disabled" {
