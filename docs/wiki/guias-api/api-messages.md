@@ -1150,6 +1150,17 @@ Para citar/responder uma mensagem, adicione o objeto `quoted` em qualquer endpoi
 
 Para mencionar usuários em grupos, use `mentionedJid` ou `mentionAll`:
 
+As menções também são aplicadas a documentos com legenda, mensagens interativas,
+botões e listas, preservando o contexto de resposta e os metadados já presentes.
+Quando ambos os campos são informados, `mentionedJid` substitui a lista de
+`mentionAll`. Se o formato da mensagem não permitir aplicar as menções, o envio
+retorna erro em vez de ignorá-las.
+
+`mentionAll` prefere o JID de telefone fornecido pelo WhatsApp. Quando um
+participante expõe apenas um JID `@lid`, esse identificador é mantido; o servidor
+não inventa um número de telefone. A aplicação dos metadados não garante que
+todos os clientes WhatsApp exibirão uma notificação nesse caso.
+
 ```json
 {
   "number": "120363XXXXXXXXXX@g.us",

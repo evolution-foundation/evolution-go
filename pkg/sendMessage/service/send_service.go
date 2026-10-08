@@ -2638,116 +2638,18 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 
 			var mentionedJIDs []string
 			for _, participant := range groupInfo.Participants {
-				mentionedJIDs = append(mentionedJIDs, participant.JID.String())
+				if jid := participantMentionJID(participant); jid != "" {
+					mentionedJIDs = append(mentionedJIDs, jid)
+				}
 			}
-
-			switch messageType {
-			case "ExtendedTextMessage":
-				if msg.ExtendedTextMessage.ContextInfo == nil {
-					msg.ExtendedTextMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ExtendedTextMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "ImageMessage":
-				if msg.ImageMessage.ContextInfo == nil {
-					msg.ImageMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ImageMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "VideoMessage":
-				if msg.VideoMessage.ContextInfo == nil {
-					msg.VideoMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.VideoMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "PtvMessage":
-				if msg.PtvMessage.ContextInfo == nil {
-					msg.PtvMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.PtvMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "AudioMessage":
-				if msg.AudioMessage.ContextInfo == nil {
-					msg.AudioMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.AudioMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "DocumentMessage":
-				if msg.DocumentMessage.ContextInfo == nil {
-					msg.DocumentMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.DocumentMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "PollCreationMessage":
-				if msg.PollCreationMessage.ContextInfo == nil {
-					msg.PollCreationMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.PollCreationMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "StickerMessage":
-				if msg.StickerMessage.ContextInfo == nil {
-					msg.StickerMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.StickerMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "LocationMessage":
-				if msg.LocationMessage.ContextInfo == nil {
-					msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.LocationMessage.ContextInfo.MentionedJID = mentionedJIDs
-			case "ContactMessage":
-				if msg.ContactMessage.ContextInfo == nil {
-					msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ContactMessage.ContextInfo.MentionedJID = mentionedJIDs
+			if len(mentionedJIDs) > 0 && !setMessageMentionedJIDs(msg, mentionedJIDs) {
+				return nil, fmt.Errorf("cannot apply mentions to message type %s", messageType)
 			}
-
 		}
 
 		if len(data.MentionedJID) > 0 {
-			switch messageType {
-			case "ExtendedTextMessage":
-				if msg.ExtendedTextMessage.ContextInfo == nil {
-					msg.ExtendedTextMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ExtendedTextMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "ImageMessage":
-				if msg.ImageMessage.ContextInfo == nil {
-					msg.ImageMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ImageMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "VideoMessage":
-				if msg.VideoMessage.ContextInfo == nil {
-					msg.VideoMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.VideoMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "PtvMessage":
-				if msg.PtvMessage.ContextInfo == nil {
-					msg.PtvMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.PtvMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "AudioMessage":
-				if msg.AudioMessage.ContextInfo == nil {
-					msg.AudioMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.AudioMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "DocumentMessage":
-				if msg.DocumentMessage.ContextInfo == nil {
-					msg.DocumentMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.DocumentMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "PollCreationMessage":
-				if msg.PollCreationMessage.ContextInfo == nil {
-					msg.PollCreationMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.PollCreationMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "StickerMessage":
-				if msg.StickerMessage.ContextInfo == nil {
-					msg.StickerMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.StickerMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "LocationMessage":
-				if msg.LocationMessage.ContextInfo == nil {
-					msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.LocationMessage.ContextInfo.MentionedJID = data.MentionedJID
-			case "ContactMessage":
-				if msg.ContactMessage.ContextInfo == nil {
-					msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{}
-				}
-				msg.ContactMessage.ContextInfo.MentionedJID = data.MentionedJID
+			if !setMessageMentionedJIDs(msg, data.MentionedJID) {
+				return nil, fmt.Errorf("cannot apply mentions to message type %s", messageType)
 			}
 		}
 	}
