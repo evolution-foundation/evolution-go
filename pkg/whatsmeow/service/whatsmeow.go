@@ -1133,6 +1133,14 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 		postMap["data"] = dataMap
 	case *events.Message:
+		if evt == nil {
+			return
+		}
+		// whatsmeow may deliver this event to other handlers. Normalize an owned
+		// copy; protobuf messages remain read-only unless replaced after decrypt.
+		messageEvent := *evt
+		evt = &messageEvent
+		postMap["data"] = evt
 		doWebhook = true
 		postMap["event"] = "Message"
 		// Message received
@@ -1180,6 +1188,14 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// Verifica advanced settings para ignorar status/broadcast
 		if (mycli.config.EventIgnoreStatus || mycli.Instance.IgnoreStatus) && (strings.Contains(evt.Info.Chat.String(), "@broadcast") || strings.Contains(evt.Info.ID, "@broadcast")) {
 			return
+		}
+
+		// Decrypt with the owning session before changing the wire JIDs.
+		decryptFailed, err := prepareIncomingMessageEdit(context.Background(), mycli.WAClient, evt)
+		if err != nil {
+			// Store/crypto errors can include private identifiers or credentials.
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn(
+				"[%s] Could not decrypt incoming message edit %s; forwarding encrypted envelope", mycli.userID, evt.Info.ID)
 		}
 
 		// Trata o caso especial onde Sender é @lid e SenderAlt é @s.whatsapp.net
@@ -1237,9 +1253,13 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		}
 
 		parsedMessageType := utils.GetMessageType(evt.Message)
-		if parsedMessageType == "ignore" || strings.HasPrefix(parsedMessageType, "unknown_protocol_") {
+		if (parsedMessageType == "ignore" || strings.HasPrefix(parsedMessageType, "unknown_protocol_")) && !evt.IsEdit {
 			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Message ignored because it's a unknown protocol message", mycli.userID)
 			return
+		}
+
+		if parsedMessageType == "edit" {
+			evt.IsEdit = true
 		}
 
 		if postMap["data"] != nil {
@@ -1265,6 +1285,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		if !ok {
 			dataMap = make(map[string]interface{})
 		}
+
+		annotateMessageAction(dataMap, evt, decryptFailed)
 
 		referral := extractReferralFromMessage(evt.Message)
 
@@ -1594,7 +1616,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		}
 
 		isGroup := strings.HasSuffix(evt.Info.Chat.String(), "@g.us")
-		if isGroup {
+		// Forward a failed edit without querying optional group metadata from an
+		// unavailable session or delaying its encrypted fallback with network I/O.
+		if isGroup && !decryptFailed && mycli.WAClient != nil && mycli.WAClient.Store != nil {
 			groupData, err := mycli.WAClient.GetGroupInfo(context.Background(), evt.Info.Chat)
 			if err == nil {
 				dataMap["groupData"] = groupData

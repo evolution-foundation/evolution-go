@@ -637,6 +637,62 @@ O Evolution GO usa dois níveis de classificação de eventos:
 - `Receipt` - Confirmação de leitura (`READ_RECEIPT`)
 - Reações, edições, deleções de mensagens
 
+#### Edição de mensagem recebida
+
+Quando um contato edita uma mensagem, o evento continua sendo `Message` (subscribe `MESSAGE`). Não existe categoria separada `MESSAGE_EDIT`.
+
+Após descriptografia, o payload inclui:
+
+- `IsEdit: true`
+- `messageType: "edit"`
+- `Message.protocolMessage.typeName: "MESSAGE_EDIT"` (o campo numérico `type` continua presente)
+- Texto novo em `Message.protocolMessage.editedMessage` (ex.: `conversation` ou `extendedTextMessage`)
+- ID da mensagem original em `Message.protocolMessage.key.ID` (ou, antes do decrypt, em `secretEncryptedMessage.targetMessageKey.ID`)
+
+O decrypt usa o `messageSecret` da mensagem original armazenado na **mesma sessão
+que recebeu o evento**, com prazo de cinco segundos para consultar o segredo.
+Ele roda **antes** de qualquer normalização LID→PN de `Info.Sender`/`Chat`.
+O evento original do whatsmeow é preservado; somente a cópia publicada tem JIDs
+normalizados e conteúdo descriptografado.
+
+Se a sessão/segredo estiver indisponível, houver falha de autenticação, IV inválido,
+timeout ou conteúdo descriptografado inválido, o webhook continua chegando com
+`IsEdit: true`, `messageType: "edit"` e `decryptFailed: true`. O envelope
+`Message.secretEncryptedMessage` e sua `targetMessageKey` são mantidos quando
+presentes. O processamento não busca outra sessão nem repete a operação após
+uma falha retornada pelo whatsmeow.
+Em grupos, esse fallback também dispensa a consulta de metadados opcionais ao
+WhatsApp, para não impedir a publicação quando a sessão estiver indisponível.
+
+Quando o conteúdo criptografado contém apenas o novo texto, o servidor mantém
+o formato `protocolMessage.editedMessage`, usando a chave real do envelope como
+`protocolMessage.key`. `Info.ID` continua sendo o ID do evento de edição, não
+o ID da mensagem original.
+
+Edições legadas já identificadas por `IsEdit` também recebem `messageType: "edit"`,
+mesmo quando `Message` contém o texto diretamente e não tem `protocolMessage`.
+Nesses casos, não é inventada uma chave para a mensagem original.
+
+Edições de newsletter/canal são identificadas por `NewsletterMeta.EditTS` e também
+recebem `IsEdit` / `messageType: "edit"`. Nesse formato específico, o whatsmeow
+fornece o texto diretamente em `Message` e `Info.ID` já é o ID da mensagem original.
+Uma mensagem normal de newsletter sem `EditTS` não é marcada como edição.
+
+#### Exclusão (revoke) de mensagem
+
+Quando um contato apaga uma mensagem “para todos”, o evento também é `Message` (subscribe `MESSAGE`).
+
+O payload inclui:
+
+- `IsRevoke: true`
+- `messageType: "revoke"`
+- `Message.protocolMessage.typeName: "REVOKE"` (para o `type: 0` explicitamente presente)
+- ID da mensagem apagada em `Message.protocolMessage.key.ID`
+
+O campo numérico `type` é preservado. Um protocolo sem tipo explícito não é
+classificado como exclusão apenas porque o valor padrão do enum é zero.
+Mensagens comuns e outros tipos de envelopes criptografados mantêm seu contrato.
+
 ### Eventos de Grupos
 
 **Categoria**: `GROUP`
