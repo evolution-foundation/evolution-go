@@ -45,7 +45,31 @@ apikey: SUA-CHAVE-API
 
 | Campo | Tipo | Obrigatório | Descrição |
 |-------|------|-------------|-----------|
-| `number` | array | ✅ Sim | Array de números a consultar |
+| `number` | array | ✅ Sim | Array de identificadores a consultar |
+
+**Query canônica (ordem recomendada):**
+
+1. `@lid` — quando conhecido (ex.: `123456789012345@lid`)
+2. PN JID — `556699956041@s.whatsapp.net` (já canônico)
+3. Dígitos — último recurso; números BR “sujos” (9º dígito extra) podem falhar ou retornar timeout rápido
+
+Prefira o JID/`@lid` já gravado pela sessão. Para URL de foto confiável, use também `POST /user/avatar` (especialmente com `@lid`).
+
+**Respostas de erro relevantes:**
+
+| HTTP | Quando |
+|------|--------|
+| 400 | Corpo nulo/inválido, números ausentes ou identificador inválido |
+| 429 | WhatsApp `rate-overlimit` (faça backoff; não trate como 500 genérico) |
+| 504 | Timeout/cancelamento na preparação da sessão, resolução de LID ou query usync |
+| 500 | Demais falhas |
+
+A consulta possui um prazo total de 15s. A resolução de LIDs e o usync
+compartilham um limite de 10s após a preparação da sessão. O enriquecimento
+opcional de LID e foto compartilha até 5s, sempre respeitando o prazo restante
+e o cancelamento da requisição. O início da sessão propaga o contexto às consultas
+de banco; depois de iniciado, o cliente permanece sob responsabilidade do serviço.
+Erros HTTP usam mensagens públicas, sem detalhes de banco ou credenciais.
 
 **Resposta de Sucesso (200)**:
 ```json
@@ -64,6 +88,7 @@ apikey: SUA-CHAVE-API
         },
         "Status": "Olá! Estou usando WhatsApp.",
         "PictureID": "abc123",
+        "PictureURL": "https://pps.whatsapp.net/v/...",
         "Devices": ["5511999999999.0:1@s.whatsapp.net"],
         "LID": "lid_string"
       }
@@ -76,12 +101,18 @@ apikey: SUA-CHAVE-API
 - `VerifiedName`: Nome verificado (empresas) ou null
 - `Status`: Recado/status do usuário
 - `PictureID`: ID da foto de perfil
+- `PictureURL`: URL da foto de perfil (preview best-effort; vazio se indisponível, sem `PictureID`, sob rate-limit ou prazo esgotado). Para imagem completa use `POST /user/avatar`. A URL é retornada sem download da imagem. Falhas opcionais preservam todos os usuários e seus dados básicos na resposta 200.
 - `Devices`: Lista de dispositivos conectados
 - `LID`: Local ID (se disponível)
 
+O LID retornado pelo usync é preservado diretamente. Quando ele estiver ausente,
+a busca opcional no store usa o mesmo prazo do enriquecimento. Fotos são consultadas
+em ordem estável de JID, sem enviar `ExistingID`; após um rate-limit, as consultas
+opcionais restantes são interrompidas. Não há repetição automática de IQs.
+
 **Exemplo cURL**:
 ```bash
-curl -X POST http://localhost:4000/user/info \
+curl -X POST http://localhost:${SERVER_PORT:-8080}/user/info \
   -H "Content-Type: application/json" \
   -H "apikey: SUA-CHAVE-API" \
   -d '{
@@ -179,32 +210,45 @@ Obtém a URL da foto de perfil de um usuário.
 
 | Campo | Tipo | Obrigatório | Descrição |
 |-------|------|-------------|-----------|
-| `number` | string | ✅ Sim | Número do usuário |
+| `number` | string | ✅ Sim | `@lid`, PN JID ou dígitos (mesma ordem canônica de `/user/info`) |
 | `preview` | bool | ❌ Não | Se true, retorna preview (menor resolução) |
+
+A requisição possui um prazo de 8s, incluindo banco no início da sessão,
+espera pelo cliente autenticado, resolução de LID e query de foto. Prefira o JID
+canônico já conhecido pela sessão. Cancelamento e timeout retornam **504**.
 
 **Resposta de Sucesso (200)**:
 ```json
 {
   "message": "success",
   "data": {
-    "URL": "https://pps.whatsapp.net/v/...",
-    "ID": "abc123",
-    "Type": "image",
-    "DirectPath": "/v/..."
+    "url": "https://pps.whatsapp.net/v/...",
+    "id": "abc123",
+    "type": "image",
+    "direct_path": "/v/...",
+    "hash": null
   }
 }
 ```
 
-**Resposta de Erro (500)**:
+**Respostas de erro**:
+
+| HTTP | Exemplo |
+|------|---------|
+| 400 | Corpo nulo/inválido ou identificador ausente/inválido |
+| 429 | WhatsApp `rate-overlimit` |
+| 504 | Timeout/cancelamento na preparação da sessão, resolução de LID ou query de foto |
+| 500 | Sem foto / foto oculta / demais falhas |
+
 ```json
 {
-  "error": "no profile picture found"
+  "error": "failed to query WhatsApp"
 }
 ```
 
 **Exemplo cURL**:
 ```bash
-curl -X POST http://localhost:4000/user/avatar \
+curl -X POST http://localhost:${SERVER_PORT:-8080}/user/avatar \
   -H "Content-Type: application/json" \
   -H "apikey: SUA-CHAVE-API" \
   -d '{

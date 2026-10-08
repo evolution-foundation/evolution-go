@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
@@ -18,9 +17,9 @@ import (
 )
 
 type UserService interface {
-	GetUser(data *CheckUserStruct, instance *instance_model.Instance) (*UserCollection, error)
+	GetUser(ctx context.Context, data *CheckUserStruct, instance *instance_model.Instance) (*UserCollection, error)
 	CheckUser(data *CheckUserStruct, instance *instance_model.Instance) (*CheckUserCollection, error)
-	GetAvatar(data *GetAvatarStruct, instance *instance_model.Instance) (*types.ProfilePictureInfo, error)
+	GetAvatar(ctx context.Context, data *GetAvatarStruct, instance *instance_model.Instance) (*types.ProfilePictureInfo, error)
 	GetContacts(instance *instance_model.Instance) ([]ContactInfo, error)
 	GetPrivacy(instance *instance_model.Instance) (types.PrivacySettings, error)
 	SetPrivacy(data *PrivacyStruct, instance *instance_model.Instance) (*types.PrivacySettings, error)
@@ -48,15 +47,17 @@ type ContactInfo struct {
 }
 
 type UserInfo struct {
-	VerifiedName *types.VerifiedName
-	Status       string
-	PictureID    string
-	Devices      []types.JID
-	LID          *string // The local ID (if available)
+	VerifiedName *types.VerifiedName `json:"VerifiedName"`
+	Status       string              `json:"Status"`
+	PictureID    string              `json:"PictureID"`
+	// PictureURL is a best-effort preview URL, empty when unavailable.
+	PictureURL string      `json:"PictureURL"`
+	Devices    []types.JID `json:"Devices" swaggertype:"array,string"`
+	LID        *string     `json:"LID"` // The local ID (if available)
 }
 
 type UserCollection struct {
-	Users map[types.JID]UserInfo
+	Users map[types.JID]UserInfo `json:"Users"`
 }
 
 type User struct {
@@ -109,88 +110,7 @@ type PrivacyStruct struct {
 }
 
 func (u *userService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := u.clientPointer[instanceId]
-	u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
-
-	if client == nil {
-		u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] No client found, attempting to start new instance", instanceId)
-		err := u.whatsmeowService.StartInstance(instanceId)
-		if err != nil {
-			u.loggerWrapper.GetLogger(instanceId).LogError("[%s] Failed to start instance: %v", instanceId, err)
-			return nil, errors.New("no active session found")
-		}
-
-		u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
-		time.Sleep(2 * time.Second)
-
-		client = u.clientPointer[instanceId]
-		u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
-			instanceId,
-			client != nil,
-			client != nil && client.IsConnected())
-
-		if client == nil || !client.IsConnected() {
-			u.loggerWrapper.GetLogger(instanceId).LogError("[%s] New client validation failed - Exists: %v, Connected: %v",
-				instanceId,
-				client != nil,
-				client != nil && client.IsConnected())
-			return nil, errors.New("no active session found")
-		}
-	} else if !client.IsConnected() {
-		u.loggerWrapper.GetLogger(instanceId).LogError("[%s] Existing client is disconnected - Connected status: %v",
-			instanceId,
-			client.IsConnected())
-		return nil, errors.New("client disconnected")
-	}
-
-	u.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client successfully validated - Connected: %v", instanceId, client.IsConnected())
-	return client, nil
-}
-
-func (u *userService) GetUser(data *CheckUserStruct, instance *instance_model.Instance) (*UserCollection, error) {
-	client, err := u.ensureClientConnected(instance.Id)
-	if err != nil {
-		return nil, err
-	}
-
-	var jids []types.JID
-	for _, arg := range data.Number {
-		jid, ok := utils.ParseJID(arg)
-		if !ok {
-			return nil, errors.New("invalid phone number")
-		}
-		jids = append(jids, jid)
-	}
-	resp, err := client.GetUserInfo(context.Background(), jids)
-	if err != nil {
-		return nil, err
-	}
-
-	uc := new(UserCollection)
-	uc.Users = make(map[types.JID]UserInfo)
-
-	for jid, whatsmeowInfo := range resp {
-		// Consultar LID Store para obter LID associado ao JID
-		var lidStr *string
-		if client.Store.LIDs != nil {
-			if lid, err := client.Store.LIDs.GetLIDForPN(context.TODO(), jid); err == nil && !lid.IsEmpty() {
-				lidString := fmt.Sprintf("%v", lid)
-				lidStr = &lidString
-			}
-		}
-
-		// Converter para nossa estrutura UserInfo que inclui LID
-		info := UserInfo{
-			VerifiedName: whatsmeowInfo.VerifiedName,
-			Status:       whatsmeowInfo.Status,
-			PictureID:    whatsmeowInfo.PictureID,
-			Devices:      whatsmeowInfo.Devices,
-			LID:          lidStr,
-		}
-		uc.Users[jid] = info
-	}
-
-	return uc, nil
+	return u.ensureClientConnectedCtx(context.Background(), instanceId)
 }
 
 func (u *userService) CheckUser(data *CheckUserStruct, instance *instance_model.Instance) (*CheckUserCollection, error) {
@@ -313,54 +233,6 @@ func (u *userService) mergeCheckUserResults(original, retry *CheckUserCollection
 	}
 
 	return merged
-}
-
-func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.Instance) (*types.ProfilePictureInfo, error) {
-	client, err := u.ensureClientConnected(instance.Id)
-	if err != nil {
-		return nil, err
-	}
-
-	// 🔒 FIX: Verificar se o cliente está conectado antes de fazer a requisição
-	if !client.IsConnected() {
-		return nil, errors.New("client is not connected to WhatsApp")
-	}
-
-	// 🔒 FIX: Verificar se o cliente está autenticado
-	if !client.IsLoggedIn() {
-		return nil, errors.New("client is not logged in to WhatsApp")
-	}
-
-	jid, ok := utils.ParseJID(data.Number)
-	if !ok {
-		return nil, errors.New("invalid phone number")
-	}
-
-	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Requesting avatar for JID: %s, Preview: %v", instance.Id, jid, data.Preview)
-
-	var pic *types.ProfilePictureInfo
-
-	// 🔒 FIX: Adicionar timeout ao contexto para evitar que a requisição trave indefinidamente
-	// Usar timeout maior que o padrão do sendIQ (75s) para dar tempo suficiente
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Second)
-	defer cancel()
-
-	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Starting GetProfilePictureInfo request...", instance.Id)
-	pic, err = client.GetProfilePictureInfo(ctx, jid, &whatsmeow.GetProfilePictureParams{
-		Preview: data.Preview,
-	})
-	if err != nil {
-		u.loggerWrapper.GetLogger(instance.Id).LogError("[%s] GetProfilePictureInfo failed: %v", instance.Id, err)
-		return nil, err
-	}
-
-	if pic == nil {
-		return nil, errors.New("no profile picture found")
-	}
-
-	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Got avatar %s", instance.Id, pic.URL)
-
-	return pic, nil
 }
 
 func (u *userService) GetContacts(instance *instance_model.Instance) ([]ContactInfo, error) {

@@ -1,12 +1,31 @@
 package user_handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	user_service "github.com/evolution-foundation/evolution-go/pkg/user/service"
 	"github.com/gin-gonic/gin"
+	"go.mau.fi/whatsmeow"
 )
+
+// writeUserWAError classifies failures without exposing storage or session details.
+func writeUserWAError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, user_service.ErrInvalidUserNumber):
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid phone number"})
+	case errors.Is(err, whatsmeow.ErrIQRateOverLimit):
+		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "WhatsApp rate limit"})
+	case errors.Is(err, whatsmeow.ErrIQTimedOut),
+		errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, context.Canceled):
+		ctx.JSON(http.StatusGatewayTimeout, gin.H{"error": "WhatsApp query timeout or cancellation"})
+	default:
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query WhatsApp"})
+	}
+}
 
 type UserHandler interface {
 	GetUser(ctx *gin.Context)
@@ -27,27 +46,35 @@ type userHandler struct {
 	userService user_service.UserService
 }
 
+// UserInfoResponse describes the existing success envelope and additive PictureURL.
+type UserInfoResponse struct {
+	Message string                       `json:"message"`
+	Data    *user_service.UserCollection `json:"data"`
+}
+
 // Get a user
 // @Summary Get a user
-// @Description Get a user
+// @Description Query user information with a best-effort preview PictureURL. Photo failures do not fail successful user information.
 // @Tags User
 // @Accept json
 // @Produce json
 // @Param message body user_service.CheckUserStruct true "User data"
-// @Success 200 {object} gin.H "success"
+// @Success 200 {object} UserInfoResponse "success"
 // @Failure 400 {object} gin.H "Error on validation"
+// @Failure 429 {object} gin.H "WhatsApp rate limit"
 // @Failure 500 {object} gin.H "Internal server error"
+// @Failure 504 {object} gin.H "WhatsApp query timeout"
 // @Router /user/info [post]
 func (u *userHandler) GetUser(ctx *gin.Context) {
-	getInstance := ctx.MustGet("instance")
+	getInstance, _ := ctx.Get("instance")
 
 	instance, ok := getInstance.(*instance_model.Instance)
-	if !ok {
+	if !ok || instance == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
 		return
 	}
 
-	var data *user_service.CheckUserStruct
+	var data user_service.CheckUserStruct
 	err := ctx.ShouldBindBodyWithJSON(&data)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -59,13 +86,13 @@ func (u *userHandler) GetUser(ctx *gin.Context) {
 		return
 	}
 
-	uc, err := u.userService.GetUser(data, instance)
+	uc, err := u.userService.GetUser(ctx.Request.Context(), &data, instance)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeUserWAError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "success", "data": uc})
+	ctx.JSON(http.StatusOK, UserInfoResponse{Message: "success", Data: uc})
 }
 
 // Check a user
@@ -111,25 +138,27 @@ func (u *userHandler) CheckUser(ctx *gin.Context) {
 
 // Get a user's avatar
 // @Summary Get a user's avatar
-// @Description Get a user's avatar
+// @Description Get a user's avatar with an eight-second request budget, including session readiness and LID resolution.
 // @Tags User
 // @Accept json
 // @Produce json
 // @Param message body user_service.GetAvatarStruct true "Avatar data"
 // @Success 200 {object} gin.H "success"
 // @Failure 400 {object} gin.H "Error on validation"
+// @Failure 429 {object} gin.H "WhatsApp rate limit"
 // @Failure 500 {object} gin.H "Internal server error"
+// @Failure 504 {object} gin.H "WhatsApp query timeout"
 // @Router /user/avatar [post]
 func (u *userHandler) GetAvatar(ctx *gin.Context) {
-	getInstance := ctx.MustGet("instance")
+	getInstance, _ := ctx.Get("instance")
 
 	instance, ok := getInstance.(*instance_model.Instance)
-	if !ok {
+	if !ok || instance == nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
 		return
 	}
 
-	var data *user_service.GetAvatarStruct
+	var data user_service.GetAvatarStruct
 	err := ctx.ShouldBindBodyWithJSON(&data)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -141,14 +170,9 @@ func (u *userHandler) GetAvatar(ctx *gin.Context) {
 		return
 	}
 
-	if data.Number == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "phone number is required"})
-		return
-	}
-
-	pic, err := u.userService.GetAvatar(data, instance)
+	pic, err := u.userService.GetAvatar(ctx.Request.Context(), &data, instance)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeUserWAError(ctx, err)
 		return
 	}
 
