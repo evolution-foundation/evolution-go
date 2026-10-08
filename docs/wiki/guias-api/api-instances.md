@@ -130,9 +130,19 @@ apikey: TOKEN-DA-INSTANCIA
 ```json
 {
   "webhookUrl": "https://seu-servidor.com/webhook",
-  "subscribe": ["messages.upsert", "connection.update"]
+  "subscribe": ["MESSAGE", "CONNECTION"]
 }
 ```
+
+Esta operação preserva as configurações existentes quando `subscribe` é omitido,
+`null` ou uma lista vazia, ou quando os campos dos produtores são omitidos,
+`null` ou strings vazias. Para desligar um produtor, envie `"disabled"` ou
+`"false"`; para desativar o webhook, envie `"disabled"`. Uma instância sem eventos
+configurados recebe o padrão `MESSAGE`.
+
+Use os nomes de eventos da API, como `MESSAGE`, `CONNECTION` e `ALL`. Eventos
+duplicados são removidos; uma lista não vazia sem nenhum evento válido retorna
+400 e preserva as configurações. O corpo deve ser um objeto JSON; `null` é inválido.
 
 ### Resposta Sucesso (200)
 ```json
@@ -141,7 +151,7 @@ apikey: TOKEN-DA-INSTANCIA
   "data": {
     "jid": "5511999999999@s.whatsapp.net",
     "webhookUrl": "https://seu-servidor.com/webhook",
-    "eventString": "messages.upsert,connection.update"
+    "eventString": "MESSAGE,CONNECTION"
   }
 }
 ```
@@ -153,7 +163,7 @@ curl -X POST http://localhost:4000/instance/connect \
   -H "apikey: token-da-instancia-vendas" \
   -d '{
     "webhookUrl": "https://seu-servidor.com/webhook",
-    "subscribe": ["messages.upsert"]
+    "subscribe": ["MESSAGE"]
   }'
 ```
 
@@ -682,21 +692,24 @@ curl "http://localhost:4000/instance/logs/vendas?start_date=2025-01-01&limit=50"
 GET /instance/:instanceId/advanced-settings
 ```
 
+`instanceId` é o UUID retornado ao criar a instância e deve corresponder ao token
+enviado no header `apikey`. Um ID de outra instância retorna 403; um ID inválido
+retorna 400.
+
 ### Headers
 ```
-apikey: SUA-GLOBAL-API-KEY
+apikey: TOKEN-DA-INSTANCIA
 ```
 
 ### Resposta (200)
 ```json
 {
   "rejectCall": false,
-  "msgCall": "Não estou disponível para chamadas",
-  "groupsIgnore": true,
+  "msgRejectCall": "Não estou disponível para chamadas",
+  "ignoreGroups": true,
   "alwaysOnline": false,
   "readMessages": false,
-  "readStatus": false,
-  "syncFullHistory": false
+  "ignoreStatus": false
 }
 ```
 
@@ -706,30 +719,39 @@ apikey: SUA-GLOBAL-API-KEY
 PUT /instance/:instanceId/advanced-settings
 ```
 
+Esta atualização é parcial: campos omitidos ou `null` mantêm os valores salvos.
+Envie `false` para desativar uma flag ou `"msgRejectCall": ""` para apagar a
+mensagem de rejeição. O corpo deve ser um objeto JSON; `{}` não altera os campos
+e `null` retorna 400. O token deve pertencer ao UUID informado no path.
+
+A resposta de sucesso contém `message` e `settings`, com todas as configurações
+lidas do banco após a gravação. Falhas de gravação ou leitura retornam erro;
+uma instância inexistente retorna 404. A gravação pode ter sido concluída quando
+uma leitura posterior falha.
+
 ### Headers
 ```
 Content-Type: application/json
-apikey: SUA-GLOBAL-API-KEY
+apikey: TOKEN-DA-INSTANCIA
 ```
 
 ### Body
 ```json
 {
   "rejectCall": true,
-  "msgCall": "Por favor, envie mensagem",
-  "groupsIgnore": false,
+  "msgRejectCall": "Por favor, envie mensagem",
+  "ignoreGroups": false,
   "alwaysOnline": true,
   "readMessages": true,
-  "readStatus": true,
-  "syncFullHistory": false
+  "ignoreStatus": true
 }
 ```
 
 ### Exemplo cURL
 ```bash
-curl -X PUT "http://localhost:4000/instance/vendas/advanced-settings" \
+curl -X PUT "http://localhost:8081/instance/SEU-UUID/advanced-settings" \
   -H "Content-Type: application/json" \
-  -H "apikey: SUA-GLOBAL-API-KEY" \
+  -H "apikey: TOKEN-DA-INSTANCIA" \
   -d '{
     "rejectCall": true,
     "alwaysOnline": true
@@ -758,7 +780,7 @@ curl -X POST http://localhost:4000/instance/connect \
   -H "apikey: token-vendas-123" \
   -d '{
     "webhookUrl": "https://meu-servidor.com/webhook",
-    "subscribe": ["messages.upsert"]
+    "subscribe": ["MESSAGE"]
   }'
 ```
 

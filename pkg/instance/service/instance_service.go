@@ -17,7 +17,6 @@ import (
 	"github.com/evolution-foundation/evolution-go/pkg/config"
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
 	instance_repository "github.com/evolution-foundation/evolution-go/pkg/instance/repository"
-	event_types "github.com/evolution-foundation/evolution-go/pkg/internal/event_types"
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
 	"github.com/evolution-foundation/evolution-go/pkg/utils"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
@@ -188,14 +187,26 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 		ClientName: i.config.ClientName,
 	}
 
-	// Set advanced settings if provided
+	// Set advanced settings if provided (nil pointers are left as defaults).
 	if data.AdvancedSettings != nil {
-		instance.AlwaysOnline = data.AdvancedSettings.AlwaysOnline
-		instance.RejectCall = data.AdvancedSettings.RejectCall
-		instance.MsgRejectCall = data.AdvancedSettings.MsgRejectCall
-		instance.ReadMessages = data.AdvancedSettings.ReadMessages
-		instance.IgnoreGroups = data.AdvancedSettings.IgnoreGroups
-		instance.IgnoreStatus = data.AdvancedSettings.IgnoreStatus
+		if data.AdvancedSettings.AlwaysOnline != nil {
+			instance.AlwaysOnline = *data.AdvancedSettings.AlwaysOnline
+		}
+		if data.AdvancedSettings.RejectCall != nil {
+			instance.RejectCall = *data.AdvancedSettings.RejectCall
+		}
+		if data.AdvancedSettings.MsgRejectCall != nil {
+			instance.MsgRejectCall = *data.AdvancedSettings.MsgRejectCall
+		}
+		if data.AdvancedSettings.ReadMessages != nil {
+			instance.ReadMessages = *data.AdvancedSettings.ReadMessages
+		}
+		if data.AdvancedSettings.IgnoreGroups != nil {
+			instance.IgnoreGroups = *data.AdvancedSettings.IgnoreGroups
+		}
+		if data.AdvancedSettings.IgnoreStatus != nil {
+			instance.IgnoreStatus = *data.AdvancedSettings.IgnoreStatus
+		}
 	}
 
 	createdInstance, err := i.instanceRepository.Create(instance)
@@ -207,39 +218,39 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 }
 
 func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
-	var subscribedEvents []string
-
-	i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
-
-	if len(data.Subscribe) == 0 {
-		subscribedEvents = append(subscribedEvents, event_types.MESSAGE)
-	} else if len(data.Subscribe) > 0 && data.Subscribe[0] == "ALL" {
-		for _, event := range event_types.AllEventTypes {
-			subscribedEvents = append(subscribedEvents, event)
-		}
-	} else {
-		for _, arg := range data.Subscribe {
-			if !event_types.IsEventType(arg) {
-				i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Message type discarded '%s'", instance.Id, arg)
-				continue
-			}
-			subscribedEvents = append(subscribedEvents, arg)
-		}
+	if data == nil || instance == nil {
+		return nil, "", "", ErrInvalidConnectSettings
 	}
-
-	eventString := strings.Join(subscribedEvents, ",")
-
-	instance.Events = eventString
-	instance.Webhook = data.WebhookUrl
-	instance.RabbitmqEnable = data.RabbitmqEnable
-	instance.NatsEnable = data.NatsEnable
-	instance.WebSocketEnable = data.WebSocketEnable
-
-	err := i.instanceRepository.Update(instance)
+	// Work on a snapshot: middleware/cache may still own the original instance.
+	// Failed validation or persistence must not publish uncommitted settings.
+	nextInstance := *instance
+	updates, err := applyConnectSettings(&nextInstance, data)
 	if err != nil {
-		i.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error updating instance: %s", instance.Id, err)
 		return nil, "", "", err
 	}
+	i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
+
+	oldEvents := instance.Events
+	oldRabbitmq := instance.RabbitmqEnable
+
+	if len(updates) > 0 {
+		err := i.instanceRepository.UpdateConnectSettings(instance.Id, updates)
+		if err != nil {
+			i.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error updating instance: %s", instance.Id, err)
+			return nil, "", "", err
+		}
+	}
+
+	instance = &nextInstance
+	if instance.Events != oldEvents {
+		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] events changed: %q -> %q", instance.Id, oldEvents, instance.Events)
+	}
+	if instance.RabbitmqEnable != oldRabbitmq {
+		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] rabbitmqEnable changed: %q -> %q", instance.Id, oldRabbitmq, instance.RabbitmqEnable)
+	}
+
+	subscribedEvents := splitSubscribedEvents(instance.Events)
+	eventString := instance.Events
 
 	// Verifica se a instância já está rodando
 	isInstanceRunning := i.clientPointer[instance.Id] != nil
@@ -247,6 +258,9 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	// Sincroniza as configurações na instância em execução (se já estiver conectada)
 	err = i.whatsmeowService.UpdateInstanceSettings(instance.Id)
 	if err != nil {
+		if isInstanceRunning {
+			return nil, "", "", fmt.Errorf("sync instance settings: %w", err)
+		}
 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Instance not in runtime yet, will be updated when connected", instance.Id)
 		isInstanceRunning = false
 	} else {
@@ -284,17 +298,6 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	} else {
 		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Instance already running, settings updated without restarting client", instance.Id)
 	}
-
-	// logger.LogInfo("Waiting 1 seconds")
-	// time.Sleep(1000 * time.Millisecond)
-
-	// if i.clientPointer[instance.Id] != nil {
-	// 	if !i.clientPointer[instance.Id].IsConnected() {
-	// 		return instance, "", "", fmt.Errorf("failed to connect")
-	// 	}
-	// } else {
-	// 	return instance, "", "", fmt.Errorf("failed to connect")
-	// }
 
 	return instance, instance.Jid, eventString, nil
 }

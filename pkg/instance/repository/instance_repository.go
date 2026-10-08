@@ -1,6 +1,7 @@
 package instance_repository
 
 import (
+	"errors"
 	"fmt"
 
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
@@ -26,6 +27,7 @@ type InstanceRepository interface {
 	UpdateQrcode(userId string, qr string) error
 	UpdateProxy(userId string, proxy string) error
 	UpdateJid(userId string, jid string) error
+	UpdateConnectSettings(instanceId string, updates map[string]interface{}) error
 	GetAllConnectedInstances() ([]*instance_model.Instance, error)
 	GetAllConnectedInstancesByClientName(clientName string) ([]*instance_model.Instance, error)
 	GetAll(clientName string) ([]*instance_model.Instance, error)
@@ -116,6 +118,20 @@ func (i *instanceRepository) UpdateJid(userId string, jid string) error {
 	return i.db.Model(&instance_model.Instance{}).Where("id = ?", userId).Update("jid", jid).Error
 }
 
+func (i *instanceRepository) UpdateConnectSettings(instanceId string, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	result := i.db.Model(&instance_model.Instance{}).Where("id = ?", instanceId).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return instance_model.ErrInstanceNotFound
+	}
+	return nil
+}
+
 func (i *instanceRepository) GetAllConnectedInstances() ([]*instance_model.Instance, error) {
 	var instances []*instance_model.Instance
 	err := i.db.Where("connected = ?", true).Find(&instances).Error
@@ -177,16 +193,19 @@ func (i *instanceRepository) GetAdvancedSettings(instanceId string) (*instance_m
 	err := i.db.Select("always_online, reject_call, msg_reject_call, read_messages, ignore_groups, ignore_status").
 		Where("id = ?", instanceId).First(&instance).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, instance_model.ErrInstanceNotFound
+		}
 		return nil, err
 	}
 
 	settings := &instance_model.AdvancedSettings{
-		AlwaysOnline:  instance.AlwaysOnline,
-		RejectCall:    instance.RejectCall,
-		MsgRejectCall: instance.MsgRejectCall,
-		ReadMessages:  instance.ReadMessages,
-		IgnoreGroups:  instance.IgnoreGroups,
-		IgnoreStatus:  instance.IgnoreStatus,
+		AlwaysOnline:  instance_model.BoolPtr(instance.AlwaysOnline),
+		RejectCall:    instance_model.BoolPtr(instance.RejectCall),
+		MsgRejectCall: &instance.MsgRejectCall,
+		ReadMessages:  instance_model.BoolPtr(instance.ReadMessages),
+		IgnoreGroups:  instance_model.BoolPtr(instance.IgnoreGroups),
+		IgnoreStatus:  instance_model.BoolPtr(instance.IgnoreStatus),
 	}
 
 	return settings, nil
@@ -198,22 +217,48 @@ func (i *instanceRepository) UpdateAdvancedSettings(instanceId string, settings 
 		return fmt.Errorf("invalid UUID format: %v", err)
 	}
 
-	updates := map[string]interface{}{
-		"always_online":   settings.AlwaysOnline,
-		"reject_call":     settings.RejectCall,
-		"msg_reject_call": settings.MsgRejectCall,
-		"read_messages":   settings.ReadMessages,
-		"ignore_groups":   settings.IgnoreGroups,
-		"ignore_status":   settings.IgnoreStatus,
+	updates := buildAdvancedSettingsUpdates(settings)
+	if len(updates) == 0 {
+		return nil
 	}
 
-	err := i.db.Model(&instance_model.Instance{}).Where("id = ?", instanceId).Updates(updates).Error
-	if err != nil {
-		logger.LogError("Error updating advanced settings in DB: %v", err)
-		return err
+	result := i.db.Model(&instance_model.Instance{}).Where("id = ?", instanceId).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return instance_model.ErrInstanceNotFound
 	}
 
 	return nil
+}
+
+// buildAdvancedSettingsUpdates writes only non-nil fields, including explicit
+// false flags and an empty reject message. Omitted/null fields stay unchanged.
+func buildAdvancedSettingsUpdates(settings *instance_model.AdvancedSettings) map[string]interface{} {
+	updates := map[string]interface{}{}
+	if settings == nil {
+		return updates
+	}
+	if settings.AlwaysOnline != nil {
+		updates["always_online"] = *settings.AlwaysOnline
+	}
+	if settings.RejectCall != nil {
+		updates["reject_call"] = *settings.RejectCall
+	}
+	if settings.ReadMessages != nil {
+		updates["read_messages"] = *settings.ReadMessages
+	}
+	if settings.IgnoreGroups != nil {
+		updates["ignore_groups"] = *settings.IgnoreGroups
+	}
+	if settings.IgnoreStatus != nil {
+		updates["ignore_status"] = *settings.IgnoreStatus
+	}
+	if settings.MsgRejectCall != nil {
+		updates["msg_reject_call"] = *settings.MsgRejectCall
+	}
+	return updates
 }
 
 func NewInstanceRepository(db *gorm.DB) InstanceRepository {
