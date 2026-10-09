@@ -92,34 +92,35 @@ type whatsmeowService struct {
 }
 
 type MyClient struct {
-	service            WhatsmeowService
-	WAClient           *whatsmeow.Client
-	eventHandlerID     uint32
-	userID             string
-	Instance           *instance_model.Instance
-	token              string
-	subscriptions      []string
-	webhookUrl         string
-	rabbitmqEnable     string
-	natsEnable         string
-	websocketEnable    string
-	instanceRepository instance_repository.InstanceRepository
-	messageRepository  message_repository.MessageRepository
-	labelRepository    label_repository.LabelRepository
-	pollService        poll_service.PollService // NOVO: Serviço de enquetes
-	clientPointer      map[string]*whatsmeow.Client
-	killChannel        map[string](chan bool)
-	userInfoCache      *cache.Cache
-	config             *config.Config
-	historySyncID      int32
-	rabbitmqProducer   producer_interfaces.Producer
-	webhookProducer    producer_interfaces.Producer
-	websocketProducer  producer_interfaces.Producer
-	mediaStorage       storage_interfaces.MediaStorage
-	processedMessages  *cache.Cache
-	natsProducer       producer_interfaces.Producer
-	loggerWrapper      *logger_wrapper.LoggerManager
-	qrcodeCount        int
+	service              WhatsmeowService
+	WAClient             *whatsmeow.Client
+	eventHandlerID       uint32
+	userID               string
+	Instance             *instance_model.Instance
+	token                string
+	subscriptions        []string
+	webhookUrl           string
+	rabbitmqEnable       string
+	natsEnable           string
+	websocketEnable      string
+	instanceRepository   instance_repository.InstanceRepository
+	messageRepository    message_repository.MessageRepository
+	labelRepository      label_repository.LabelRepository
+	pollService          poll_service.PollService // NOVO: Serviço de enquetes
+	clientPointer        map[string]*whatsmeow.Client
+	killChannel          map[string](chan bool)
+	userInfoCache        *cache.Cache
+	config               *config.Config
+	historySyncID        int32
+	rabbitmqProducer     producer_interfaces.Producer
+	webhookProducer      producer_interfaces.Producer
+	websocketProducer    producer_interfaces.Producer
+	mediaStorage         storage_interfaces.MediaStorage
+	processedMessages    *cache.Cache
+	natsProducer         producer_interfaces.Producer
+	loggerWrapper        *logger_wrapper.LoggerManager
+	qrcodeCount          int
+	activityPulseStarted bool
 }
 
 type ClientData struct {
@@ -844,6 +845,48 @@ func processPresenceUpdates(mycli *MyClient) {
 	}
 }
 
+// pulseCompanionActivity records that the linked device is in use, then
+// returns to unavailable. WhatsApp drops an inactive companion after 30 days.
+// Leaving it available suppresses phone push notifications, so the available
+// state is only a short blip.
+func pulseCompanionActivity(mycli *MyClient) {
+	if mycli == nil || mycli.WAClient == nil {
+		return
+	}
+	logger := mycli.loggerWrapper.GetLogger(mycli.userID)
+	if err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
+		logger.LogWarn("[%s] Failed to send activity presence: %v", mycli.userID, err)
+		return
+	}
+	time.Sleep(time.Duration(3+rand.Intn(5)) * time.Second)
+	if mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+		return
+	}
+	if err := mycli.WAClient.SendPresence(context.Background(), types.PresenceUnavailable); err != nil {
+		logger.LogWarn("[%s] Failed to restore unavailable presence: %v", mycli.userID, err)
+		return
+	}
+	logger.LogInfo("[%s] Companion activity pulsed; presence restored to unavailable", mycli.userID)
+}
+
+func scheduleCompanionActivityPulse(mycli *MyClient) {
+	timer := time.NewTimer(companionActivityInterval())
+	defer timer.Stop()
+	for {
+		<-timer.C
+		if mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+			return
+		}
+		pulseCompanionActivity(mycli)
+		timer.Reset(companionActivityInterval())
+	}
+}
+
+func companionActivityInterval() time.Duration {
+	// Inside the 30-day inactivity window, and not a presence loop.
+	return 20*time.Hour + time.Duration(rand.Intn(4*60))*time.Minute
+}
+
 func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	userID := mycli.userID
 	postMap := make(map[string]interface{})
@@ -905,13 +948,20 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 			postMap["data"] = dataMap
 
-			go schedulePresenceUpdates(mycli)
-
-			err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
-			if err != nil {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send available presence %v", mycli.userID, err)
+			if mycli.Instance != nil && mycli.Instance.AlwaysOnline {
+				go schedulePresenceUpdates(mycli)
+				err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
+				if err != nil {
+					mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send available presence %v", mycli.userID, err)
+				} else {
+					mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Marked self as available", mycli.userID)
+				}
 			} else {
-				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Marked self as available", mycli.userID)
+				if !mycli.activityPulseStarted {
+					mycli.activityPulseStarted = true
+					go scheduleCompanionActivityPulse(mycli)
+				}
+				go pulseCompanionActivity(mycli)
 			}
 
 			mycli.Instance.Connected = true
