@@ -119,8 +119,11 @@ type MyClient struct {
 	processedMessages    *cache.Cache
 	natsProducer         producer_interfaces.Producer
 	loggerWrapper        *logger_wrapper.LoggerManager
-	qrcodeCount          int
-	activityPulseStarted bool
+	qrcodeCount    int
+	presenceMu     sync.Mutex
+	presenceStop   chan struct{}
+	presenceOnline bool
+	presenceGen    uint64
 }
 
 type ClientData struct {
@@ -172,8 +175,11 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
 		}
 	}
 
+	if mycli, ok := w.myClientPointer[instanceId]; ok {
+		mycli.stopPresence()
+	}
+
 	// Passo 2: Limpar todos os recursos da instância
-	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Cleaning up resources", instanceId)
 
 	// Enviar sinal de kill se o canal existir
 	if killChan, exists := w.killChannel[instanceId]; exists {
@@ -794,12 +800,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	}
 }
 
-func schedulePresenceUpdates(mycli *MyClient) {
+func schedulePresenceUpdates(mycli *MyClient, stop <-chan struct{}) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
+		case <-stop:
+			return
 		case <-ticker.C:
 			// Verificar se a instância ainda existe
 			_, err := mycli.instanceRepository.GetInstanceByID(mycli.userID)
@@ -814,9 +822,7 @@ func schedulePresenceUpdates(mycli *MyClient) {
 			randomInterval := time.Duration(1+rand.Intn(3)) * time.Hour
 			ticker = time.NewTicker(randomInterval)
 
-		case <-mycli.killChannel[mycli.userID]:
-			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Received kill signal, stopping presence updates", mycli.userID)
-			return // Encerra a goroutine quando receber sinal de kill
+
 		}
 	}
 }
@@ -848,9 +854,9 @@ func processPresenceUpdates(mycli *MyClient) {
 // pulseCompanionActivity records that the linked device is in use, then
 // returns to unavailable. WhatsApp drops an inactive companion after 30 days.
 // Leaving it available suppresses phone push notifications, so the available
-// state is only a short blip.
-func pulseCompanionActivity(mycli *MyClient) {
-	if mycli == nil || mycli.WAClient == nil {
+// state is only a short blip. This goroutine must not read killChannel.
+func pulseCompanionActivity(mycli *MyClient, gen uint64) {
+	if mycli == nil || mycli.WAClient == nil || !mycli.presenceCurrent(gen) {
 		return
 	}
 	logger := mycli.loggerWrapper.GetLogger(mycli.userID)
@@ -859,33 +865,105 @@ func pulseCompanionActivity(mycli *MyClient) {
 		return
 	}
 	time.Sleep(time.Duration(3+rand.Intn(5)) * time.Second)
-	if mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
-		return
-	}
-	if err := mycli.WAClient.SendPresence(context.Background(), types.PresenceUnavailable); err != nil {
+	if err := restoreUnavailable(mycli, gen); err != nil {
 		logger.LogWarn("[%s] Failed to restore unavailable presence: %v", mycli.userID, err)
-		return
 	}
-	logger.LogInfo("[%s] Companion activity pulsed; presence restored to unavailable", mycli.userID)
 }
 
-func scheduleCompanionActivityPulse(mycli *MyClient) {
+func restoreUnavailable(mycli *MyClient, gen uint64) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if !mycli.presenceCurrent(gen) || mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+			return nil
+		}
+		if mycli.Instance != nil && mycli.Instance.AlwaysOnline {
+			return nil
+		}
+		err = mycli.WAClient.SendPresence(context.Background(), types.PresenceUnavailable)
+		if err == nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Companion activity pulsed; presence restored to unavailable", mycli.userID)
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return err
+}
+
+func scheduleCompanionActivityPulse(mycli *MyClient, stop <-chan struct{}, gen uint64) {
 	timer := time.NewTimer(companionActivityInterval())
 	defer timer.Stop()
 	for {
-		<-timer.C
-		if mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+		select {
+		case <-stop:
 			return
+		case <-timer.C:
+			if !mycli.presenceCurrent(gen) || mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+				return
+			}
+			if mycli.Instance != nil && mycli.Instance.AlwaysOnline {
+				return
+			}
+			pulseCompanionActivity(mycli, gen)
+			timer.Reset(companionActivityInterval())
 		}
-		pulseCompanionActivity(mycli)
-		timer.Reset(companionActivityInterval())
 	}
 }
 
 func companionActivityInterval() time.Duration {
-	// Inside the 30-day inactivity window, and not a presence loop.
 	return 20*time.Hour + time.Duration(rand.Intn(4*60))*time.Minute
 }
+
+func (mycli *MyClient) presenceCurrent(gen uint64) bool {
+	mycli.presenceMu.Lock()
+	defer mycli.presenceMu.Unlock()
+	return mycli.presenceGen == gen
+}
+
+func (mycli *MyClient) reconcilePresence() {
+	if mycli == nil || mycli.WAClient == nil || !mycli.WAClient.IsLoggedIn() {
+		return
+	}
+	online := mycli.Instance != nil && mycli.Instance.AlwaysOnline
+
+	mycli.presenceMu.Lock()
+	if mycli.presenceStop != nil && mycli.presenceOnline == online {
+		mycli.presenceMu.Unlock()
+		return
+	}
+	if mycli.presenceStop != nil {
+		close(mycli.presenceStop)
+	}
+	stop := make(chan struct{})
+	mycli.presenceStop = stop
+	mycli.presenceOnline = online
+	mycli.presenceGen++
+	gen := mycli.presenceGen
+	mycli.presenceMu.Unlock()
+
+	if online {
+		go schedulePresenceUpdates(mycli, stop)
+		if err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable); err != nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send available presence %v", mycli.userID, err)
+		}
+		return
+	}
+	go scheduleCompanionActivityPulse(mycli, stop, gen)
+	go pulseCompanionActivity(mycli, gen)
+}
+
+func (mycli *MyClient) stopPresence() {
+	if mycli == nil {
+		return
+	}
+	mycli.presenceMu.Lock()
+	defer mycli.presenceMu.Unlock()
+	if mycli.presenceStop != nil {
+		close(mycli.presenceStop)
+		mycli.presenceStop = nil
+	}
+}
+
+
 
 func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	userID := mycli.userID
@@ -948,21 +1026,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 			postMap["data"] = dataMap
 
-			if mycli.Instance != nil && mycli.Instance.AlwaysOnline {
-				go schedulePresenceUpdates(mycli)
-				err := mycli.WAClient.SendPresence(context.Background(), types.PresenceAvailable)
-				if err != nil {
-					mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Failed to send available presence %v", mycli.userID, err)
-				} else {
-					mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Marked self as available", mycli.userID)
-				}
-			} else {
-				if !mycli.activityPulseStarted {
-					mycli.activityPulseStarted = true
-					go scheduleCompanionActivityPulse(mycli)
-				}
-				go pulseCompanionActivity(mycli)
-			}
+			var err error
+			mycli.reconcilePresence()
 
 			mycli.Instance.Connected = true
 			mycli.Instance.DisconnectReason = ""
@@ -2656,6 +2721,7 @@ func (w whatsmeowService) UpdateInstanceAdvancedSettings(instanceId string) erro
 
 	// Atualiza a instância no MyClient com as advanced settings atualizadas
 	myClient.Instance = instance
+	myClient.reconcilePresence()
 
 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Advanced settings updated in runtime successfully", instanceId)
 	return nil
