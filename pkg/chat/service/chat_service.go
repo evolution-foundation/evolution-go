@@ -11,6 +11,7 @@ import (
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 )
 
@@ -232,15 +233,22 @@ func (c *chatService) HistorySyncRequest(data *HistorySyncRequestStruct, instanc
 		Timestamp: data.MessageInfo.Timestamp,
 	}
 
-	histRequest := client.BuildHistorySyncRequest(&messageInfo, data.Count)
-
-	res, err := client.SendMessage(context.Background(), messageInfo.Chat, histRequest, whatsmeow.SendRequestExtra{Peer: true})
+	res, err := requestHistorySync(context.Background(), client, &messageInfo, data.Count)
 	if err != nil {
 		c.loggerWrapper.GetLogger(instance.Id).LogError("[%s] error history sync request: %v", instance.Id, err)
 		return nil, err
 	}
 
 	return &res, nil
+}
+
+type historySyncSender interface {
+	BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageInfo, count int) *waE2E.Message
+	SendPeerMessage(ctx context.Context, message *waE2E.Message) (whatsmeow.SendResponse, error)
+}
+
+func requestHistorySync(ctx context.Context, sender historySyncSender, messageInfo *types.MessageInfo, count int) (whatsmeow.SendResponse, error) {
+	return sender.SendPeerMessage(ctx, sender.BuildHistorySyncRequest(messageInfo, count))
 }
 
 func NewChatService(
