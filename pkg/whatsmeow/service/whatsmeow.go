@@ -100,8 +100,6 @@ type whatsmeowService struct {
 	storeContainer     *storeContainerHolder
 }
 
-// storeContainerHolder guarda o container whatsmeow compartilhado por todas as
-// instâncias. É ponteiro porque vários métodos do serviço têm receiver por valor.
 type storeContainerHolder struct {
 	mu        sync.Mutex
 	container *sqlstore.Container
@@ -309,10 +307,6 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
-// getStoreContainer devolve o container whatsmeow único do processo, criado na
-// primeira chamada. Antes cada StartClient abria um pool novo (sqlstore.New) que
-// nunca era fechado: a cada connect/pair as conexões acumulavam até estourar o
-// limite do Postgres. Erro no Upgrade não fica em cache; a próxima chamada tenta de novo.
 func (w *whatsmeowService) getStoreContainer() (*sqlstore.Container, error) {
 	w.storeContainer.mu.Lock()
 	defer w.storeContainer.mu.Unlock()
@@ -329,7 +323,6 @@ func (w *whatsmeowService) getStoreContainer() (*sqlstore.Container, error) {
 	var container *sqlstore.Container
 	var err error
 	if w.config.PostgresAuthDB != "" {
-		// Reaproveita o pool do AUTH DB, que já tem limites configurados no main.
 		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
 		err = container.Upgrade(context.Background())
 	} else {
