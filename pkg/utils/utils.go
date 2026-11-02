@@ -207,6 +207,13 @@ func ParseJID(arg string) (whatsmeow_types.JID, bool) {
 		return recipient, false
 	}
 
+	// CreateJID keeps the "+" prefix for IsOnWhatsApp, but it is not part of a
+	// user JID. WhatsApp does not answer queries addressed to "+<number>", so
+	// they hang until the IQ timeout.
+	if recipient.Server == whatsmeow_types.DefaultUserServer {
+		recipient.User = strings.TrimPrefix(recipient.User, "+")
+	}
+
 	if recipient.User == "" && !strings.Contains(jidString, "@broadcast") {
 		logger.LogError("Invalid JID. No user specified: %s", jidString)
 		return recipient, false
