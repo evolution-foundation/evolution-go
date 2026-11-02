@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/evolution-foundation/evolution-go/pkg/syncmap"
 	"log"
 	"net/http"
 	"os"
@@ -83,8 +84,8 @@ func init() {
 }
 
 func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.Config, conn *amqp.Connection, exPath string, runtimeCtx *core.RuntimeContext) *gin.Engine {
-	killChannel := make(map[string](chan bool))
-	clientPointer := make(map[string]*whatsmeow.Client)
+	killChannel := syncmap.New[string, chan bool]()
+	clientPointer := syncmap.New[string, *whatsmeow.Client]()
 
 	loggerWrapper := logger_wrapper.NewLoggerManager(config)
 
