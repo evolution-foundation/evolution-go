@@ -966,6 +966,15 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	}
 }
 
+func archivePayload(evt *events.Archive) map[string]interface{} {
+	return map[string]interface{}{
+		"JID":          evt.JID,
+		"Timestamp":    evt.Timestamp,
+		"Action":       evt.Action,
+		"FromFullSync": evt.FromFullSync,
+	}
+}
+
 func schedulePresenceUpdates(mycli *MyClient) {
 	timer := time.NewTimer(1 * time.Minute)
 	defer timer.Stop()
@@ -2177,12 +2186,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		doWebhook = true
 		postMap["event"] = "Archive"
 
-		dataMap := postMap["data"].(map[string]interface{})
-		dataMap["JID"] = evt.JID
-		dataMap["Timestamp"] = evt.Timestamp
-		dataMap["Action"] = evt.Action
-		dataMap["FromFullSync"] = evt.FromFullSync
-		postMap["data"] = dataMap
+		// postMap["data"] ainda é o *events.Archive cru aqui; a asserção para
+		// map[string]interface{} entrava em panic e o evento nunca saía.
+		postMap["data"] = archivePayload(evt)
 
 		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Chat archived", mycli.userID)
 	case *events.HistorySync:
