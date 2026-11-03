@@ -5,7 +5,7 @@ APP_NAME=evolution-go
 MAIN_PATH=cmd/evolution-go/main.go
 BUILD_DIR=build
 GO=go
-VERSION=$(shell grep -om1 "v[0-9].*" CHANGELOG.md)
+VERSION=$(shell sed -n 's/^## \(v[0-9][^ ]*\).*/\1/p' CHANGELOG.md | head -1)
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 GOFLAGS=-v
 

@@ -3,11 +3,11 @@
 ## Não lançado
 
 ### 🔧 Correções
-- **whatsmeow atualizado para 2026-11-02** — a versão fixada em 0.7.2
-  (`v0.0.0-20260630180629`) ficou 125 dias atrás do upstream. O WhatsApp subiu a
-  versão mínima de cliente nesse intervalo e passou a recusar a conexão com
-  **405 client outdated**, impedindo pareamento e reconexão das instâncias.
-  Agora em `v0.0.0-20261102152715-54038813c47f`.
+- **whatsmeow atualizado para 2026-11-02** — a versão fixada na 0.7.2
+  (commit `b572e5bcb92b`, de 30/06/2026) ficou 125 dias atrás do upstream. O
+  WhatsApp subiu a versão mínima de cliente nesse intervalo e passou a recusar a
+  conexão com **405 client outdated**, impedindo pareamento e reconexão das
+  instâncias. Agora em `v0.0.0-20261102152715-54038813c47f`.
 - **Go 1.26** — o whatsmeow novo exige `go >= 1.26.0`; o `Dockerfile` passou a
   usar `golang:1.26.10-alpine` no estágio de build.
 - **Ajustes de API do whatsmeow** — `UpdateBlocklist` e `GetBlocklist` agora
