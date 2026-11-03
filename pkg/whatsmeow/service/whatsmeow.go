@@ -94,6 +94,7 @@ type whatsmeowService struct {
 	websocketProducer  producer_interfaces.Producer
 	sqliteDB           *sql.DB
 	exPath             string
+	deviceContainer    *sharedContainer
 	mediaStorage       storage_interfaces.MediaStorage
 	processedMessages  *cache.Cache
 	natsProducer       producer_interfaces.Producer
@@ -181,6 +182,55 @@ type ProxyConfig struct {
 	Password string `json:"password"`
 	Port     string `json:"port"`
 	Username string `json:"username"`
+}
+
+// sharedContainer guarda um único sqlstore.Container (e, portanto, um único
+// pool de conexões) para o processo inteiro. As instâncias são separadas pelo
+// JID na tabela whatsmeow_device, então reconexões e novas instâncias apenas
+// buscam/criam o device no container existente, sem abrir pools novos.
+type sharedContainer struct {
+	mu        sync.Mutex
+	container *sqlstore.Container
+}
+
+// getContainer devolve o container compartilhado, criando-o na primeira chamada.
+// Com Postgres, reaproveita o pool do authDB (já limitado em main.go) e roda o
+// upgrade do schema uma vez. Se a criação falhar, a próxima chamada tenta de novo.
+func (w whatsmeowService) getContainer() (*sqlstore.Container, error) {
+	sc := w.deviceContainer
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	if sc.container != nil {
+		return sc.container, nil
+	}
+
+	var dbLog waLog.Logger
+	if w.config.WaDebug != "" {
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+
+	ctx := context.Background()
+	var container *sqlstore.Container
+	if w.config.PostgresAuthDB != "" {
+		if w.authDB == nil {
+			return nil, fmt.Errorf("postgres auth database is not initialized")
+		}
+		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
+		if err := container.Upgrade(ctx); err != nil {
+			return nil, fmt.Errorf("failed to upgrade whatsmeow schema: %w", err)
+		}
+	} else {
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		var err error
+		container, err = sqlstore.New(ctx, "sqlite", dsn, dbLog)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	sc.container = container
+	return container, nil
 }
 
 // runtimeLifecycle serializes start/restart operations for each instance.
@@ -597,42 +647,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		w.lifecycle.mu.Unlock()
 	}()
 
-	var container *sqlstore.Container
-
-	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
-		}
-	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
-	}
-
+	// Container único do processo: todas as instâncias compartilham o mesmo
+	// pool no banco de auth. Ele não é fechado aqui — fechar o container fecharia
+	// o pool de todas as instâncias.
+	container, err := w.getContainer()
 	if err != nil {
 		logger.LogError("[%s] Failed to create container: %v", instanceID, err)
 		return
 	}
-	containerClosed := false
-	closeContainer := func() {
-		if containerClosed {
-			return
-		}
-		containerClosed = true
-		if err := container.Close(); err != nil {
-			logger.LogWarn("[%s] Failed to close sqlstore container: %v", instanceID, err)
-		} else {
-			logger.LogInfo("[%s] SQL session store closed", instanceID)
-		}
-	}
-	defer closeContainer()
 
 	if cd.Instance.Jid != "" {
 		jid, _ := utils.ParseJID(cd.Instance.Jid)
@@ -839,10 +861,6 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		if client.IsConnected() {
 			client.Disconnect()
 		}
-		// Close the sqlstore before unpublishing the runtime pointers. A controlled
-		// restart waits for those pointers to disappear, so the old and new pools
-		// cannot overlap.
-		closeContainer()
 		w.clearRuntimePointers(instanceID, client, mycli, stopChannel)
 		w.userInfoCache.Delete(cd.Instance.Token)
 	}()
@@ -3224,6 +3242,7 @@ func NewWhatsmeowService(
 		websocketProducer:  websocketProducer,
 		sqliteDB:           sqliteDB,
 		exPath:             exPath,
+		deviceContainer:    &sharedContainer{},
 		mediaStorage:       mediaStorage,
 		processedMessages:  cache.New(30*time.Minute, 1*time.Hour),
 		natsProducer:       natsProducer,
