@@ -610,7 +610,7 @@ O Evolution GO usa dois níveis de classificação de eventos:
 | `READ_RECEIPT` | `Receipt` |
 | `GROUP` | `GroupInfo`, `JoinedGroup` |
 | `CALL` | `CallOffer`, `CallAccept`, `CallTerminate` |
-| `CONNECTION` | `Connected`, `Disconnected`, `LoggedOut` |
+| `CONNECTION` | `Connected`, `Disconnected`, `LoggedOut`, `PairSuccess`, `ConnectFailure`, `TemporaryBan`, `ClientOutdated`, `StreamReplaced` |
 | `QRCODE` | `PairSuccess`, `Disconnected` (com QR) |
 | `ALL` | Todos os eventos |
 
@@ -660,6 +660,9 @@ O Evolution GO usa dois níveis de classificação de eventos:
 - `Disconnected` - Instância desconectada
 - `LoggedOut` - Logout realizado (por outra sessão ou WhatsApp)
 - `TemporaryBan` - Conta temporariamente banida
+- `ConnectFailure` - Falha ao conectar (inclui o código retornado pelo WhatsApp)
+- `ClientOutdated` - Versão do cliente recusada pelo WhatsApp (405)
+- `StreamReplaced` - Sessão substituída por outra conexão do mesmo número
 
 ### Eventos de QR Code
 
