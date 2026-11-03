@@ -18,7 +18,6 @@ type CallService interface {
 }
 
 type callService struct {
-	clientPointer    map[string]*whatsmeow.Client
 	whatsmeowService whatsmeow_service.WhatsmeowService
 	loggerWrapper    *logger_wrapper.LoggerManager
 }
@@ -29,7 +28,7 @@ type RejectCallStruct struct {
 }
 
 func (c *callService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := c.clientPointer[instanceId]
+	client := c.whatsmeowService.GetClient(instanceId)
 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -43,7 +42,7 @@ func (c *callService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = c.clientPointer[instanceId]
+		client = c.whatsmeowService.GetClient(instanceId)
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -88,7 +87,6 @@ func NewCallService(
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) CallService {
 	return &callService{
-		clientPointer:    clientPointer,
 		whatsmeowService: whatsmeowService,
 		loggerWrapper:    loggerWrapper,
 	}
