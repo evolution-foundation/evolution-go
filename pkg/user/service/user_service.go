@@ -335,6 +335,9 @@ func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.
 	if !ok {
 		return nil, errors.New("invalid phone number")
 	}
+	// GetProfilePictureInfo consulta o JID como está; com o "+" a consulta vai
+	// para um usuário inexistente e só termina no timeout (~75s).
+	jid = utils.CanonicalJID(jid)
 
 	u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Requesting avatar for JID: %s, Preview: %v", instance.Id, jid, data.Preview)
 
