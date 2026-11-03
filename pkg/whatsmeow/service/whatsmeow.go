@@ -803,6 +803,9 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	client.EnableAutoReconnect = false
 	client.AutoTrustIdentity = true
+	// Mensagens que falham ao descriptografar (comum na 1ª mensagem de um
+	// contato novo) são pedidas de novo ao celular em vez de descartadas.
+	client.AutomaticMessageRerequestFromPhone = w.config.RerequestFromPhone
 
 	mycli = &MyClient{
 		service:            &w,
