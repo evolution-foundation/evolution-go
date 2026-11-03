@@ -23,7 +23,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          # A diretiva `go` do go.mod é só o mínimo (ex.: 1.26.0); usar o patch
+          # mais recente da série para incluir as correções da stdlib.
+          go-version: '1.26'
+          check-latest: true
 
       - name: Dependências CGO
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libjpeg-turbo8-dev libwebp-dev
@@ -48,7 +51,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          # A diretiva `go` do go.mod é só o mínimo (ex.: 1.26.0); usar o patch
+          # mais recente da série para incluir as correções da stdlib.
+          go-version: '1.26'
+          check-latest: true
 
       - name: Dependências CGO
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libjpeg-turbo8-dev libwebp-dev

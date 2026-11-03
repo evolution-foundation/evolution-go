@@ -32,7 +32,7 @@ docker run --rm -v "$PWD":/src -v evogo-gomod:/go/pkg/mod -w /src golang:1.26-al
   'apk add -q build-base libjpeg-turbo-dev libwebp-dev git && go build ./cmd/evolution-go && go vet ./... && go test ./...'
 ```
 
-Vulnerabilidades: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`. O CI (`.github/workflows/ci.yml`) roda build, vet, testes com `-race`, govulncheck e o build da imagem Docker.
+Vulnerabilidades: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` (com o patch mais recente do Go — a stdlib também é verificada). Ao subir a versão mínima no `go.mod`, atualizar `go-version` em `ci.yml`. O CI (`.github/workflows/ci.yml`) roda build, vet, testes com `-race`, govulncheck e o build da imagem Docker.
 
 ## Estrutura
 
