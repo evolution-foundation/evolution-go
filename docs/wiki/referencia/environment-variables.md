@@ -62,6 +62,7 @@ POSTGRES_USERS_DB=postgresql://user:pass@host:5432/evogo_users?sslmode=disable
 | `WEBHOOK_FILES` | `true` | Enviar URLs de mídia em webhooks |
 | `QRCODE_MAX_COUNT` | `5` | Tentativas máximas de QR Code |
 | `CHECK_USER_EXISTS` | `true` | Validar destinatário antes de enviar |
+| `REREQUEST_FROM_PHONE` | `false` | Pedir ao celular as mensagens que falharam ao descriptografar (evita perder a 1ª mensagem de contatos novos) |
 
 ---
 
