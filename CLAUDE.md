@@ -47,7 +47,7 @@ Vulnerabilidades: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` (com o
 
 - **405 "Client outdated"**: o handshake usa `store.GetWAVersion()` do whatsmeow, não `DeviceProps.Version`. `applyWhatsAppHandshakeVersion` aplica a versão do WhatsApp Web via `store.SetWAVersion` em `StartClient`. Ao atualizar o whatsmeow, conferir se isso continua valendo.
 - Atualizações do whatsmeow costumam quebrar a API (ex.: `GetBlocklist`/`UpdateBlocklist` ganharam `dhash`, `SetStatusMessage` passou a receber `types.SetStatusInput`). Sempre rodar o build completo.
-- `POST /instance/connect` sobrescreve webhook/eventos da instância com o corpo da requisição.
+- `POST /instance/connect` só altera os campos presentes no JSON (`webhookUrl`, `subscribe`, `rabbitmqEnable`, `natsEnable`, `websocketEnable`); omitidos mantêm o valor salvo, e `"webhookUrl": ""` explícito limpa o webhook (`applyConnectSettings`).
 - `ConnectOnStartup` reconecta todas as instâncias pareadas (`jid` preenchido), via upstream PR #154. Sem ele, só as com `connected = true`.
 - Estouro de conexões no Postgres: existe **um único** `sqlstore.Container` por processo (`getContainer`), montado sobre o pool do `authDB` (limite em `cmd/evolution-go/main.go`). **Nunca** chamar `container.Close()` por instância: isso fecha o `authDB` de todo mundo. Quedas de conexão reaproveitam o cliente, sem recriá-lo (PR #154).
 
