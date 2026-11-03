@@ -26,7 +26,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: evoapicloud/evolution-go
+          # Publica no namespace do dono do fork (não no evoapicloud oficial).
+          images: ${{ secrets.DOCKER_USERNAME }}/evolution-go
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable=${{ !contains(steps.version.outputs.version, '-beta') }}
