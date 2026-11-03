@@ -1643,6 +1643,11 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			}()
 		}
 
+		// Edições feitas no celular chegam cifradas (secretEncryptedMessage
+		// MESSAGE_EDIT). Abre antes de tipar a mensagem, para o webhook receber
+		// o texto novo como protocolMessage MESSAGE_EDIT.
+		mycli.unwrapSecretEncryptedEdit(evt, rawInfo)
+
 		parsedMessageType := utils.GetMessageType(evt.Message)
 		if parsedMessageType == "ignore" || strings.HasPrefix(parsedMessageType, "unknown_protocol_") {
 			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Message ignored because it's a unknown protocol message", mycli.userID)
@@ -1684,7 +1689,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				fmt.Printf("[POLL DEBUG] ✅ mycli.WAClient is initialized: %s\n", mycli.WAClient.Store.ID)
 			}
 
-			decrypted, err := decryptPollVoteWithOriginalInfo(evt, rawInfo, func(e *events.Message) (*waE2E.PollVoteMessage, error) {
+			decrypted, err := decryptWithOriginalInfo(evt, rawInfo, func(e *events.Message) (*waE2E.PollVoteMessage, error) {
 				return mycli.WAClient.DecryptPollVote(context.Background(), e)
 			})
 			if err != nil {
