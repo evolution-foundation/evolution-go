@@ -354,19 +354,10 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	store.DeviceProps.RequireFullSync = proto.Bool(true)
 
 	if w.config.WhatsappVersionMajor != 0 && w.config.WhatsappVersionMinor != 0 && w.config.WhatsappVersionPatch != 0 {
-		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version to %d.%d.%d", cd.Instance.Id, w.config.WhatsappVersionMajor, w.config.WhatsappVersionMinor, w.config.WhatsappVersionPatch)
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version from config to %d.%d.%d", cd.Instance.Id, w.config.WhatsappVersionMajor, w.config.WhatsappVersionMinor, w.config.WhatsappVersionPatch)
 		version.Major = w.config.WhatsappVersionMajor
-		if err == nil {
-			store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
-		}
 		version.Minor = w.config.WhatsappVersionMinor
-		if err == nil {
-			store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
-		}
 		version.Patch = w.config.WhatsappVersionPatch
-		if err == nil {
-			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
-		}
 	} else {
 		// Try to fetch version from WhatsApp Web
 		webVersion, err := fetchWhatsAppWebVersion()
@@ -375,11 +366,20 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		} else {
 			w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Setting whatsapp version from web to %d.%d.%d", cd.Instance.Id, webVersion.Major, webVersion.Minor, webVersion.Patch)
 			version = *webVersion
-			store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
-			store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
-			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
 	}
+
+	if version.Major == 0 || version.Minor == 0 || version.Patch == 0 {
+		// Fallback seguro caso a busca falhe ou a config esteja vazia
+		version = clientVersion{Major: 2, Minor: 3000, Patch: 1052812464}
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Using fallback WhatsApp version %d.%d.%d", cd.Instance.Id, version.Major, version.Minor, version.Patch)
+	}
+
+	store.DeviceProps.Version.Primary = proto.Uint32(uint32(version.Major))
+	store.DeviceProps.Version.Secondary = proto.Uint32(uint32(version.Minor))
+	store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
+	store.SetWAVersion(store.WAVersionContainer{uint32(version.Major), uint32(version.Minor), uint32(version.Patch)})
+	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] WhatsApp client payload version set to %d.%d.%d", cd.Instance.Id, version.Major, version.Minor, version.Patch)
 
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
@@ -2474,7 +2474,14 @@ func fetchWhatsAppWebVersion() (*clientVersion, error) {
 		return cachedWebVersion, nil
 	}
 
-	resp, err := http.Get("https://web.whatsapp.com/sw.js")
+	req, err := http.NewRequest("GET", "https://web.whatsapp.com/sw.js", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request for WhatsApp Web version: %v", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch WhatsApp Web version: %v", err)
 	}
