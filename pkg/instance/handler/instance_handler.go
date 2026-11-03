@@ -601,14 +601,13 @@ func (h *instanceHandler) GetLogs(c *gin.Context) {
 // @Param instanceId path string true "Instance ID"
 // @Success 200 {object} instance_model.AdvancedSettings "Advanced settings retrieved successfully"
 // @Failure 400 {object} gin.H "Invalid instance ID"
+// @Failure 403 {object} gin.H "instanceId does not match the authenticated instance"
 // @Failure 404 {object} gin.H "Instance not found"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/{instanceId}/advanced-settings [get]
 func (h *instanceHandler) GetAdvancedSettings(c *gin.Context) {
-	instanceId := c.Param("instanceId")
-
-	if instanceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
+	instanceId, ok := authorizedPathInstance(c)
+	if !ok {
 		return
 	}
 
@@ -631,14 +630,13 @@ func (h *instanceHandler) GetAdvancedSettings(c *gin.Context) {
 // @Param settings body instance_model.AdvancedSettings true "Advanced settings data"
 // @Success 200 {object} gin.H "Advanced settings updated successfully"
 // @Failure 400 {object} gin.H "Invalid request data"
+// @Failure 403 {object} gin.H "instanceId does not match the authenticated instance"
 // @Failure 404 {object} gin.H "Instance not found"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/{instanceId}/advanced-settings [put]
 func (h *instanceHandler) UpdateAdvancedSettings(c *gin.Context) {
-	instanceId := c.Param("instanceId")
-
-	if instanceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
+	instanceId, ok := authorizedPathInstance(c)
+	if !ok {
 		return
 	}
 
@@ -658,6 +656,29 @@ func (h *instanceHandler) UpdateAdvancedSettings(c *gin.Context) {
 		"message":  "Advanced settings updated successfully",
 		"settings": settings,
 	})
+}
+
+// authorizedPathInstance devolve o instanceId da URL somente se ele for a
+// instância autenticada pelo apikey. Sem isso, o token de qualquer instância
+// lia/alterava as configurações de outra.
+func authorizedPathInstance(c *gin.Context) (string, bool) {
+	instanceId := c.Param("instanceId")
+	if instanceId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
+		return "", false
+	}
+
+	instance, ok := c.MustGet("instance").(*instance_model.Instance)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
+		return "", false
+	}
+	if instance.Id != instanceId {
+		c.JSON(http.StatusForbidden, gin.H{"error": "instanceId does not match the authenticated instance"})
+		return "", false
+	}
+
+	return instanceId, true
 }
 
 func NewInstanceHandler(instanceService instance_service.InstanceService, config *config.Config) InstanceHandler {
