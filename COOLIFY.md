@@ -8,7 +8,9 @@ na mesma revisão da tag 0.7.2.
 
 1. Crie uma aplicação a partir do repositório deste fork. Selecione a branch
    `feat/0.7.2-whatsapp-version`, use a estratégia **Docker Compose**, diretório
-   base `/` e localização `/compose.coolify.yaml`.
+   base `/` e localização `/compose.coolify.yaml`. Em **General > Build pipeline**,
+   habilite **Preserve repository during deployment** para manter o SQL de
+   inicialização do PostgreSQL disponível ao container.
 2. Configure `GLOBAL_API_KEY` com a chave administrativa da Evolution Go.
    Gere `POSTGRES_PASSWORD` com `openssl rand -hex 32` para usar um valor seguro
    que também seja válido dentro das URLs PostgreSQL.
