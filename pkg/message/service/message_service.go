@@ -477,6 +477,9 @@ func (m *messageService) DeleteMessageEveryone(data *MessageStruct, instance *in
 		m.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating message fields", instance.Id)
 		return "", "", errors.New("invalid phone number")
 	}
+	// O JID vai dentro da Key do protocolMessage do revoke; com o "+" que o
+	// CreateJID adiciona, os aparelhos não acham o chat e ignoram o revoke.
+	recipient = utils.CanonicalJID(recipient)
 
 	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Revoking message %s from %s", data.MessageID, recipient)
 
@@ -505,6 +508,8 @@ func (m *messageService) EditMessage(data *EditMessageStruct, instance *instance
 		m.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating message fields", instance.Id)
 		return "", "", errors.New("invalid phone number")
 	}
+	// Mesmo motivo do DeleteMessageEveryone: o JID vai na Key da edição.
+	recipient = utils.CanonicalJID(recipient)
 
 	resp, err := client.SendMessage(
 		context.Background(),
