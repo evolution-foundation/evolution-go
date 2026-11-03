@@ -1161,7 +1161,18 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		}
 	case *events.StreamReplaced:
 		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Received StreamReplaced event", mycli.userID)
-		return
+		doWebhook = true
+		postMap["event"] = "StreamReplaced"
+		postMap["data"] = map[string]interface{}{
+			"reason": "stream replaced",
+		}
+	case *events.ClientOutdated:
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Received ClientOutdated event", mycli.userID)
+		doWebhook = true
+		postMap["event"] = "ClientOutdated"
+		postMap["data"] = map[string]interface{}{
+			"reason": "client outdated (405)",
+		}
 	case *events.TemporaryBan:
 		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] User received temporary ban for %s", mycli.userID, evt.Code.String())
 		doWebhook = true
@@ -2282,11 +2293,6 @@ func (w *whatsmeowService) CallWebhook(instance *instance_model.Instance, queueN
 			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
 			w.sendToQueueOrWebhook(instance, queueName, jsonData)
 		}
-	case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
-		if contains(subscriptions, "CONNECTION") {
-			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
-			w.sendToQueueOrWebhook(instance, queueName, jsonData)
-		}
 	case "LabelEdit", "LabelAssociationChat", "LabelAssociationMessage":
 		if contains(subscriptions, "LABEL") {
 			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
@@ -2329,7 +2335,10 @@ func (w *whatsmeowService) CallWebhook(instance *instance_model.Instance, queueN
 		}
 
 	default:
-		return
+		if isConnectionEvent(eventType) && contains(subscriptions, "CONNECTION") {
+			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
+			w.sendToQueueOrWebhook(instance, queueName, jsonData)
+		}
 	}
 }
 
@@ -2570,8 +2579,6 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 				globalEventType = "CHAT_PRESENCE"
 			case "CallOffer", "CallAccept", "CallTerminate", "CallOfferNotice", "CallRelayLatency":
 				globalEventType = "CALL"
-			case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
-				globalEventType = "CONNECTION"
 			case "LabelEdit", "LabelAssociationChat", "LabelAssociationMessage":
 				globalEventType = "LABEL"
 			case "Contact", "PushName":
@@ -2587,8 +2594,11 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 			case "QRCode", "QRTimeout", "QRSuccess":
 				globalEventType = "QRCODE"
 			default:
-				w.loggerWrapper.GetLogger(userId).LogInfo("[%s] Event %s not mapped to global event type", userId, eventType)
-				return
+				if !isConnectionEvent(eventType) {
+					w.loggerWrapper.GetLogger(userId).LogInfo("[%s] Event %s not mapped to global event type", userId, eventType)
+					return
+				}
+				globalEventType = "CONNECTION"
 			}
 
 			// Verifica se o grupo de eventos está na lista
@@ -2632,8 +2642,6 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 			globalEventType = "CHAT_PRESENCE"
 		case "CallOffer", "CallAccept", "CallTerminate", "CallOfferNotice", "CallRelayLatency":
 			globalEventType = "CALL"
-		case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
-			globalEventType = "CONNECTION"
 		case "LabelEdit", "LabelAssociationChat", "LabelAssociationMessage":
 			globalEventType = "LABEL"
 		case "Contact", "PushName":
@@ -2645,7 +2653,9 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 		case "QRCode", "QRTimeout", "QRSuccess":
 			globalEventType = "QRCODE"
 		default:
-			globalEventType = ""
+			if isConnectionEvent(eventType) {
+				globalEventType = "CONNECTION"
+			}
 		}
 
 		// Verifica se o evento está na lista de eventos globais NATS

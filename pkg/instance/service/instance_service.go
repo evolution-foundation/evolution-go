@@ -301,9 +301,8 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 }
 
 func (i instances) Reconnect(instance *instance_model.Instance) error {
-	_, err := i.ensureClientConnected(instance.Id)
-	if err != nil {
-		return err
+	if i.clientPointer.Get(instance.Id) == nil {
+		return i.whatsmeowService.StartInstance(instance.Id)
 	}
 
 	return i.whatsmeowService.ReconnectClient(instance.Id)
@@ -577,9 +576,24 @@ func (i instances) Info(instanceId string) (*instance_model.Instance, error) {
 		instance.Connected = false
 	}
 
+	instance.HasProxy = i.hasProxy(instance.Proxy)
 	instance.Proxy = ""
 
 	return instance, nil
+}
+
+func (i instances) hasProxy(rawProxy string) bool {
+	if i.config.ProxyHost != "" {
+		return true
+	}
+	if rawProxy == "" {
+		return false
+	}
+	var proxyConfig ProxyConfig
+	if err := json.Unmarshal([]byte(rawProxy), &proxyConfig); err != nil {
+		return false
+	}
+	return proxyConfig.Host != ""
 }
 
 func (i instances) Delete(id string) error {
