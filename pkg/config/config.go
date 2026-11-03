@@ -242,7 +242,7 @@ func Load() *Config {
 
 	connectOnStartup := os.Getenv(config_env.CONNECT_ON_STARTUP)
 	if connectOnStartup == "" {
-		connectOnStartup = "false"
+		connectOnStartup = "true"
 	}
 
 	osName := os.Getenv(config_env.OS_NAME)
