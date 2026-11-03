@@ -1585,6 +1585,10 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 			return
 		}
 
+		// Cópia do Info como veio do whatsmeow, antes do swap/limpeza abaixo. A
+		// descriptografia de votos de enquete depende do Sender/Chat originais.
+		rawInfo := evt.Info
+
 		// Trata o caso especial onde Sender é @lid e SenderAlt é @s.whatsapp.net
 		// Neste caso, devemos inverter: Sender e Chat devem ser @s.whatsapp.net, SenderAlt deve ser @lid
 		senderStr := evt.Info.Sender.String()
@@ -1680,7 +1684,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				fmt.Printf("[POLL DEBUG] ✅ mycli.WAClient is initialized: %s\n", mycli.WAClient.Store.ID)
 			}
 
-			decrypted, err := mycli.WAClient.DecryptPollVote(context.Background(), evt)
+			decrypted, err := decryptPollVoteWithOriginalInfo(evt, rawInfo, func(e *events.Message) (*waE2E.PollVoteMessage, error) {
+				return mycli.WAClient.DecryptPollVote(context.Background(), e)
+			})
 			if err != nil {
 				mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Failed to decrypt vote: %v", mycli.userID, err)
 			} else {
