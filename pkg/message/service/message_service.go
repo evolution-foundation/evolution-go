@@ -13,6 +13,7 @@ import (
 	logger_wrapper "github.com/evolution-foundation/evolution-go/pkg/logger"
 	message_model "github.com/evolution-foundation/evolution-go/pkg/message/model"
 	message_repository "github.com/evolution-foundation/evolution-go/pkg/message/repository"
+	"github.com/evolution-foundation/evolution-go/pkg/runtimestate"
 	"github.com/evolution-foundation/evolution-go/pkg/utils"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
 	"github.com/vincent-petithory/dataurl"
@@ -35,7 +36,7 @@ type MessageService interface {
 }
 
 type messageService struct {
-	clientPointer     map[string]*whatsmeow.Client
+	clientPointer     *runtimestate.Map[string, *whatsmeow.Client]
 	messageRepository message_repository.MessageRepository
 	whatsmeowService  whatsmeow_service.WhatsmeowService
 	loggerWrapper     *logger_wrapper.LoggerManager
@@ -95,7 +96,7 @@ type MessageSendStruct struct {
 }
 
 func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := m.clientPointer[instanceId]
+	client := m.clientPointer.Get(instanceId)
 	m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -109,7 +110,7 @@ func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Cl
 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = m.clientPointer[instanceId]
+		client = m.clientPointer.Get(instanceId)
 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -526,7 +527,7 @@ func (m *messageService) EditMessage(data *EditMessageStruct, instance *instance
 }
 
 func NewMessageService(
-	clientPointer map[string]*whatsmeow.Client,
+	clientPointer *runtimestate.Map[string, *whatsmeow.Client],
 	messageRepository message_repository.MessageRepository,
 	whatsmeowService whatsmeow_service.WhatsmeowService,
 	loggerWrapper *logger_wrapper.LoggerManager,

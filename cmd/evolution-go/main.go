@@ -55,6 +55,7 @@ import (
 	passkey_handler "github.com/evolution-foundation/evolution-go/pkg/passkey/handler"
 	poll_handler "github.com/evolution-foundation/evolution-go/pkg/poll/handler"
 	routes "github.com/evolution-foundation/evolution-go/pkg/routes"
+	"github.com/evolution-foundation/evolution-go/pkg/runtimestate"
 	send_handler "github.com/evolution-foundation/evolution-go/pkg/sendMessage/handler"
 	send_service "github.com/evolution-foundation/evolution-go/pkg/sendMessage/service"
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
@@ -83,8 +84,8 @@ func init() {
 }
 
 func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.Config, conn *amqp.Connection, exPath string, runtimeCtx *core.RuntimeContext) *gin.Engine {
-	killChannel := make(map[string](chan bool))
-	clientPointer := make(map[string]*whatsmeow.Client)
+	killChannel := runtimestate.New[string, *runtimestate.StopSignal]()
+	clientPointer := runtimestate.New[string, *whatsmeow.Client]()
 
 	loggerWrapper := logger_wrapper.NewLoggerManager(config)
 
