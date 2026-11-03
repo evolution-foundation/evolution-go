@@ -601,7 +601,7 @@ func (i instances) Delete(id string) error {
 	}
 
 	// Solicita ao loop proprietário do cliente que encerre a conexão, remova os
-	// ponteiros e feche o sqlstore. Não feche o canal diretamente: isso pode
+	// ponteiros. Não feche o canal diretamente: isso pode
 	// causar panic em goroutines que ainda estejam enviando o sinal de parada.
 	err = i.whatsmeowService.ClearInstanceCache(instance.Id, instance.Token)
 	if err != nil {

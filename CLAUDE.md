@@ -49,7 +49,7 @@ Vulnerabilidades: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` (com o
 - Atualizações do whatsmeow costumam quebrar a API (ex.: `GetBlocklist`/`UpdateBlocklist` ganharam `dhash`, `SetStatusMessage` passou a receber `types.SetStatusInput`). Sempre rodar o build completo.
 - `POST /instance/connect` sobrescreve webhook/eventos da instância com o corpo da requisição.
 - `ConnectOnStartup` reconecta todas as instâncias pareadas (`jid` preenchido), via upstream PR #154. Sem ele, só as com `connected = true`.
-- Estouro de conexões no Postgres: cada `StartClient` abre um `sqlstore.Container` (pool próprio). Ele precisa ser fechado no shutdown, e quedas de conexão devem reaproveitar o cliente, não recriá-lo (PR #154).
+- Estouro de conexões no Postgres: existe **um único** `sqlstore.Container` por processo (`getContainer`), montado sobre o pool do `authDB` (limite em `cmd/evolution-go/main.go`). **Nunca** chamar `container.Close()` por instância: isso fecha o `authDB` de todo mundo. Quedas de conexão reaproveitam o cliente, sem recriá-lo (PR #154).
 
 ## Deploy (rmserver)
 
