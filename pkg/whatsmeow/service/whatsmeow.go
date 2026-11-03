@@ -403,6 +403,16 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
+	// DeviceProps.Version só é enviado no pareamento. O handshake (inclusive o
+	// login de sessões já pareadas) usa store.GetWAVersion(), que fica na versão
+	// embutida no whatsmeow até chamarmos SetWAVersion — e o WhatsApp recusa com
+	// 405 "Client outdated" quando essa versão expira.
+	if applied, ok := applyWhatsAppHandshakeVersion(version); ok {
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] WhatsApp handshake version set to %s", cd.Instance.Id, applied)
+	} else {
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] WhatsApp handshake version left at library default %s", cd.Instance.Id, store.GetWAVersion().String())
+	}
+
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
 	minLevel := w.config.WaDebug
@@ -2609,6 +2619,21 @@ var (
 	cachedWebVersionMu sync.Mutex
 	webVersionCacheTTL = 1 * time.Hour
 )
+
+// applyWhatsAppHandshakeVersion publica a versão do WhatsApp Web resolvida no
+// payload global usado pelo handshake do websocket. Versões incompletas são
+// ignoradas para que uma falha na consulta não sobrescreva o default da lib.
+func applyWhatsAppHandshakeVersion(version clientVersion) (string, bool) {
+	if version.Major <= 0 || version.Minor < 0 || version.Patch <= 0 {
+		return "", false
+	}
+	store.SetWAVersion(store.WAVersionContainer{
+		uint32(version.Major),
+		uint32(version.Minor),
+		uint32(version.Patch),
+	})
+	return store.GetWAVersion().String(), true
+}
 
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()
