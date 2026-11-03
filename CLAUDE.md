@@ -48,7 +48,8 @@ Vulnerabilidades: `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`. O CI 
 - **405 "Client outdated"**: o handshake usa `store.GetWAVersion()` do whatsmeow, não `DeviceProps.Version`. `applyWhatsAppHandshakeVersion` aplica a versão do WhatsApp Web via `store.SetWAVersion` em `StartClient`. Ao atualizar o whatsmeow, conferir se isso continua valendo.
 - Atualizações do whatsmeow costumam quebrar a API (ex.: `GetBlocklist`/`UpdateBlocklist` ganharam `dhash`, `SetStatusMessage` passou a receber `types.SetStatusInput`). Sempre rodar o build completo.
 - `POST /instance/connect` sobrescreve webhook/eventos da instância com o corpo da requisição.
-- `ConnectOnStartup` só reconecta instâncias com `connected = true` no banco.
+- `ConnectOnStartup` reconecta todas as instâncias pareadas (`jid` preenchido), via upstream PR #154. Sem ele, só as com `connected = true`.
+- Estouro de conexões no Postgres: cada `StartClient` abre um `sqlstore.Container` (pool próprio). Ele precisa ser fechado no shutdown, e quedas de conexão devem reaproveitar o cliente, não recriá-lo (PR #154).
 
 ## Deploy (rmserver)
 
