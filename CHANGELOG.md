@@ -1,5 +1,24 @@
 # Evolution GO - Changelog
 
+## Não lançado
+
+### 🔧 Correções
+- **whatsmeow atualizado para 2026-11-02** — a versão fixada em 0.7.2
+  (`v0.0.0-20260630180629`) ficou 125 dias atrás do upstream. O WhatsApp subiu a
+  versão mínima de cliente nesse intervalo e passou a recusar a conexão com
+  **405 client outdated**, impedindo pareamento e reconexão das instâncias.
+  Agora em `v0.0.0-20261102152715-54038813c47f`.
+- **Go 1.26** — o whatsmeow novo exige `go >= 1.26.0`; o `Dockerfile` passou a
+  usar `golang:1.26.10-alpine` no estágio de build.
+- **Ajustes de API do whatsmeow** — `UpdateBlocklist` e `GetBlocklist` agora
+  recebem um `dhash`; `SetStatusMessage` passou a receber `types.SetStatusInput`
+  (novo endpoint mex). O formato de resposta de bloqueio mudou de
+  `Modifications` para `Items` (com `LID`/`PN`/`Active`) — a documentação foi
+  atualizada, mas integrações que leem `Modifications` precisam de ajuste.
+- **Migração automática do banco de autenticação** — o schema do whatsmeow sobe
+  de v14 para v16 (`companion_meta_nonce`, `wasa_root_secret_id`). Roda sozinho
+  ao abrir o container; testado com banco SQLite v14 existente.
+
 ## v0.7.2
 
 **Docker:** `evoapicloud/evolution-go:0.7.2`
