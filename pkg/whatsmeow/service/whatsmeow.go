@@ -342,6 +342,19 @@ func (mycli *MyClient) startWorker() bool {
 	return true
 }
 
+func (mycli *MyClient) isReconnecting() bool {
+	mycli.lifecycleMu.Lock()
+	defer mycli.lifecycleMu.Unlock()
+	return mycli.reconnecting
+}
+
+// keepAliveExpired replica o critério que o whatsmeow só aplica com
+// EnableAutoReconnect (desligado aqui): keepalives falhando há mais de
+// KeepAliveMaxFailTime indicam um socket morto que nunca emite Disconnected.
+func keepAliveExpired(lastSuccess, now time.Time) bool {
+	return now.Sub(lastSuccess) > whatsmeow.KeepAliveMaxFailTime
+}
+
 func (mycli *MyClient) endReconnect() {
 	mycli.lifecycleMu.Lock()
 	mycli.reconnecting = false
@@ -2333,6 +2346,19 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		if !mycli.isStopping() && mycli.WAClient.Store.ID != nil {
 			mycli.recoverConnection()
 		}
+	case *events.KeepAliveTimeout:
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Keepalive timed out (%d consecutive, last success %s)", mycli.userID, evt.ErrorCount, evt.LastSuccess.Format(time.RFC3339))
+		if keepAliveExpired(evt.LastSuccess, time.Now()) && !mycli.isStopping() && !mycli.isReconnecting() {
+			// Disconnect() manual não emite events.Disconnected, então a
+			// recuperação é disparada aqui, reaproveitando o mesmo cliente.
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Keepalive failing for over %s; forcing reconnect", mycli.userID, whatsmeow.KeepAliveMaxFailTime)
+			mycli.WAClient.Disconnect()
+			mycli.recoverConnection()
+		}
+		return
+	case *events.KeepAliveRestored:
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Keepalive restored", mycli.userID)
+		return
 	case *events.Disconnected:
 		doWebhook = true
 		postMap["event"] = "Disconnected"
