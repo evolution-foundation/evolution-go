@@ -284,13 +284,31 @@ func TestParseJID(t *testing.T) {
 			name:      "Valid phone number",
 			input:     "15551234567",
 			expectOk:  true,
-			expectJID: "+15551234567@s.whatsapp.net",
+			expectJID: "15551234567@s.whatsapp.net",
 		},
 		{
 			name:      "Valid BR number",
 			input:     "5531987654321",
 			expectOk:  true,
-			expectJID: "+553187654321@s.whatsapp.net",
+			expectJID: "553187654321@s.whatsapp.net",
+		},
+		{
+			name:      "Number with plus prefix",
+			input:     "+15551234567",
+			expectOk:  true,
+			expectJID: "15551234567@s.whatsapp.net",
+		},
+		{
+			name:      "Full JID with plus prefix",
+			input:     "+15551234567@s.whatsapp.net",
+			expectOk:  true,
+			expectJID: "15551234567@s.whatsapp.net",
+		},
+		{
+			name:      "LID",
+			input:     "123456789012345@lid",
+			expectOk:  true,
+			expectJID: "123456789012345@lid",
 		},
 		{
 			name:      "Valid group ID",
