@@ -80,6 +80,35 @@ type ConnectStruct struct {
 	RabbitmqEnable  string   `json:"rabbitmqEnable"`
 	WebSocketEnable string   `json:"websocketEnable"`
 	NatsEnable      string   `json:"natsEnable"`
+
+	// present records which JSON keys were sent. nil means the struct was not
+	// decoded from JSON (Go callers), in which case every field is applied.
+	present map[string]bool
+}
+
+// UnmarshalJSON keeps the regular decoding and also records which keys were
+// present, so Connect can leave omitted settings untouched.
+func (c *ConnectStruct) UnmarshalJSON(b []byte) error {
+	type plain ConnectStruct
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	*c = ConnectStruct(p)
+	c.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		c.present[k] = true
+	}
+	return nil
+}
+
+// has reports whether the field was sent (always true for structs built in Go).
+func (c *ConnectStruct) has(key string) bool {
+	return c.present == nil || c.present[key]
 }
 
 type StatusStruct struct {
@@ -212,12 +241,22 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 	return createdInstance, nil
 }
 
-func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
+// applyConnectSettings applies a connect request to the instance and returns
+// the resulting event string and any discarded (unknown) event names. Settings
+// omitted from the JSON body keep their saved values.
+func applyConnectSettings(data *ConnectStruct, instance *instance_model.Instance) (string, []string) {
+	if data == nil {
+		// Corpo JSON "null": trata como corpo vazio (preserva tudo).
+		data = &ConnectStruct{present: map[string]bool{}}
+	}
+
 	var subscribedEvents []string
+	var discarded []string
 
-	i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
-
-	if len(data.Subscribe) == 0 {
+	if !data.has("subscribe") && instance.Events != "" {
+		// subscribe omitido: mantém as inscrições salvas.
+		subscribedEvents = strings.Split(instance.Events, ",")
+	} else if len(data.Subscribe) == 0 {
 		subscribedEvents = append(subscribedEvents, event_types.MESSAGE)
 	} else if len(data.Subscribe) > 0 && data.Subscribe[0] == "ALL" {
 		for _, event := range event_types.AllEventTypes {
@@ -226,7 +265,7 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	} else {
 		for _, arg := range data.Subscribe {
 			if !event_types.IsEventType(arg) {
-				i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Message type discarded '%s'", instance.Id, arg)
+				discarded = append(discarded, arg)
 				continue
 			}
 			subscribedEvents = append(subscribedEvents, arg)
@@ -235,11 +274,33 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 
 	eventString := strings.Join(subscribedEvents, ",")
 
+	// Só sobrescreve o que veio no corpo: um connect parcial (ex.: só
+	// {"immediate": true}) não deve apagar webhook nem produtores salvos.
 	instance.Events = eventString
-	instance.Webhook = data.WebhookUrl
-	instance.RabbitmqEnable = data.RabbitmqEnable
-	instance.NatsEnable = data.NatsEnable
-	instance.WebSocketEnable = data.WebSocketEnable
+	if data.has("webhookUrl") {
+		instance.Webhook = data.WebhookUrl
+	}
+	if data.has("rabbitmqEnable") {
+		instance.RabbitmqEnable = data.RabbitmqEnable
+	}
+	if data.has("natsEnable") {
+		instance.NatsEnable = data.NatsEnable
+	}
+	if data.has("websocketEnable") {
+		instance.WebSocketEnable = data.WebSocketEnable
+	}
+
+	return eventString, discarded
+}
+
+func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
+	if data != nil {
+		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
+	}
+	eventString, discarded := applyConnectSettings(data, instance)
+	for _, arg := range discarded {
+		i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Message type discarded '%s'", instance.Id, arg)
+	}
 
 	err := i.instanceRepository.Update(instance)
 	if err != nil {
