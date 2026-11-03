@@ -437,6 +437,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
 	}
+	applyWAVersion(version)
 
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
@@ -2668,6 +2669,23 @@ var (
 	cachedWebVersionMu sync.Mutex
 	webVersionCacheTTL = 1 * time.Hour
 )
+
+var waVersionMu sync.Mutex
+
+// applyWAVersion sets the version sent in the connect handshake. DeviceProps
+// only describes the companion; without SetWAVersion every connect carried
+// whatsmeow's built-in version, which WhatsApp rejects with 405 once it ages.
+func applyWAVersion(v clientVersion) {
+	next := store.WAVersionContainer{uint32(v.Major), uint32(v.Minor), uint32(v.Patch)}
+	if next.IsZero() {
+		return
+	}
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+	if store.GetWAVersion() != next {
+		store.SetWAVersion(next)
+	}
+}
 
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()
