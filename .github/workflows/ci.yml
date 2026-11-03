@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Dependências CGO
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libjpeg-turbo8-dev libwebp-dev
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: Build
+        run: go build -o /dev/null ./cmd/evolution-go
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Dependências CGO
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libjpeg-turbo8-dev libwebp-dev
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem (sem push)
+        run: docker build --build-arg VERSION=${{ github.sha }} -t evolution-go:ci .
