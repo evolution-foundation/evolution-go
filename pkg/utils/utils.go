@@ -207,6 +207,13 @@ func ParseJID(arg string) (whatsmeow_types.JID, bool) {
 		return recipient, false
 	}
 
+	// CreateJID mantém o "+" para o IsOnWhatsApp, mas ele não faz parte de um
+	// JID de usuário: consultas para "+<número>@s.whatsapp.net" nunca são
+	// respondidas e só terminam no timeout de IQ (~75s). Ref. upstream #224.
+	if recipient.Server == whatsmeow_types.DefaultUserServer {
+		recipient.User = strings.TrimPrefix(recipient.User, "+")
+	}
+
 	if recipient.User == "" && !strings.Contains(jidString, "@broadcast") {
 		logger.LogError("Invalid JID. No user specified: %s", jidString)
 		return recipient, false
