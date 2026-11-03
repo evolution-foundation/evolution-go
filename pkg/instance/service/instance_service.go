@@ -308,14 +308,11 @@ func (i instances) Disconnect(instance *instance_model.Instance) (*instance_mode
 	if client.IsConnected() {
 		if client.IsLoggedIn() {
 			i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Disconnection successful", instance.Id)
+			// Não limpar instance.Events: com a string vazia, a instância volta
+			// a conectar sem nenhuma inscrição e o CallWebhook descarta todos os
+			// eventos. O status connected=false é gravado pelo próprio loop do
+			// cliente ao receber o sinal de parada.
 			if err := i.signalStop(instance.Id); err != nil {
-				return instance, err
-			}
-
-			instance.Events = ""
-
-			err := i.instanceRepository.Update(instance)
-			if err != nil {
 				return instance, err
 			}
 
