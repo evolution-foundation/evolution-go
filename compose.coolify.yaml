@@ -1,0 +1,56 @@
+services:
+  evolution-go:
+    build:
+      context: .
+      args:
+        VERSION: 0.7.2-wa-version.1
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      SERVER_PORT: "8080"
+      CLIENT_NAME: evolution
+      GLOBAL_API_KEY: "${GLOBAL_API_KEY:?}"
+      POSTGRES_AUTH_DB: "postgresql://evolution:${POSTGRES_PASSWORD:?}@postgres:5432/evogo_auth?sslmode=disable"
+      POSTGRES_USERS_DB: "postgresql://evolution:${POSTGRES_PASSWORD:?}@postgres:5432/evogo_users?sslmode=disable"
+      EVOLUTION_OPERATOR_EMAIL: "${EVOLUTION_OPERATOR_EMAIL:-}"
+      PASSKEY_PUBLIC_URL: "${PASSKEY_PUBLIC_URL:-}"
+      WHATSAPP_VERSION_MAJOR: "${WHATSAPP_VERSION_MAJOR:-}"
+      WHATSAPP_VERSION_MINOR: "${WHATSAPP_VERSION_MINOR:-}"
+      WHATSAPP_VERSION_PATCH: "${WHATSAPP_VERSION_PATCH:-}"
+      CONNECT_ON_STARTUP: "true"
+      DATABASE_SAVE_MESSAGES: "false"
+      MINIO_ENABLED: "false"
+      WADEBUG: INFO
+      LOGTYPE: console
+    volumes:
+      - evolution-data:/app/dbdata
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/server/ok"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?}"
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/examples/init-db.sql:/docker-entrypoint-initdb.d/10-evolution.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "evolution", "-d", "evogo_users"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  evolution-data:
+  postgres-data:

@@ -46,3 +46,7 @@ Makefile
 
 # IMPORTANT: O código-fonte (pkg/, cmd/, etc.) é necessário no stage de build
 # mas NÃO é copiado para a imagem final - apenas o executável compilado vai.
+# Local credentials and the precompiled upstream binary
+.env
+.env.*
+evolution-go
