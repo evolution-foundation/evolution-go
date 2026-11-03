@@ -57,6 +57,11 @@ type WhatsmeowService interface {
 	ReconnectClient(instanceId string) error
 	RequestStop(instanceId string) error
 	ClientRuntimeState(instanceId string) (exists bool, connected bool, loggedIn bool)
+	// GetClient returns the current whatsmeow client for the instance (nil if
+	// none), read under the lifecycle lock. Other packages must use this instead
+	// of indexing the shared clientPointer map, which StartClient/reconnect write
+	// concurrently.
+	GetClient(instanceId string) *whatsmeow.Client
 	ClearInstanceCache(instanceId string, token string) error
 	CallWebhook(instance *instance_model.Instance, queueName string, jsonData []byte)
 	SendToGlobalQueues(event string, jsonData []byte, userId string)
@@ -494,6 +499,12 @@ func (w whatsmeowService) RequestStop(instanceId string) error {
 		// A stop request is already queued.
 	}
 	return nil
+}
+
+// GetClient returns the instance's current client under the lifecycle lock.
+func (w whatsmeowService) GetClient(instanceId string) *whatsmeow.Client {
+	client, _, _ := w.runtimePointers(instanceId)
+	return client
 }
 
 // ClientRuntimeState reports the current client from the lifecycle-owned maps.
