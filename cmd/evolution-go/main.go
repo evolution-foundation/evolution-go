@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -248,8 +249,10 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		token := c.Query("token")
 		instanceId := c.Query("instanceId")
 
-		if token != config.GlobalApiKey {
-			logger.LogError("Token inválido: %s", token)
+		// Não registra o token recebido (um valor quase certo vazaria a chave
+		// nos logs). Comparação em tempo constante; chave vazia nunca autoriza.
+		if config.GlobalApiKey == "" || subtle.ConstantTimeCompare([]byte(token), []byte(config.GlobalApiKey)) != 1 {
+			logger.LogError("WebSocket: token inválido (origem %s)", c.ClientIP())
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
 			return
 		}
