@@ -50,7 +50,6 @@ type InstanceService interface {
 type instances struct {
 	instanceRepository instance_repository.InstanceRepository
 	config             *config.Config
-	clientPointer      map[string]*whatsmeow.Client
 	whatsmeowService   whatsmeow_service.WhatsmeowService
 	loggerWrapper      *logger_wrapper.LoggerManager
 }
@@ -81,6 +80,35 @@ type ConnectStruct struct {
 	RabbitmqEnable  string   `json:"rabbitmqEnable"`
 	WebSocketEnable string   `json:"websocketEnable"`
 	NatsEnable      string   `json:"natsEnable"`
+
+	// present records which JSON keys were sent. nil means the struct was not
+	// decoded from JSON (Go callers), in which case every field is applied.
+	present map[string]bool
+}
+
+// UnmarshalJSON keeps the regular decoding and also records which keys were
+// present, so Connect can leave omitted settings untouched.
+func (c *ConnectStruct) UnmarshalJSON(b []byte) error {
+	type plain ConnectStruct
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	*c = ConnectStruct(p)
+	c.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		c.present[k] = true
+	}
+	return nil
+}
+
+// has reports whether the field was sent (always true for structs built in Go).
+func (c *ConnectStruct) has(key string) bool {
+	return c.present == nil || c.present[key]
 }
 
 type StatusStruct struct {
@@ -125,7 +153,7 @@ type ForceReconnectStruct struct {
 
 func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
 	logger := i.loggerWrapper.GetLogger(instanceId)
-	client := i.clientPointer[instanceId]
+	client := i.whatsmeowService.GetClient(instanceId)
 	logger.LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -139,7 +167,7 @@ func (i *instances) ensureClientConnected(instanceId string) (*whatsmeow.Client,
 		logger.LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = i.clientPointer[instanceId]
+		client = i.whatsmeowService.GetClient(instanceId)
 		logger.LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -213,12 +241,22 @@ func (i instances) Create(data *CreateStruct) (*instance_model.Instance, error) 
 	return createdInstance, nil
 }
 
-func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
+// applyConnectSettings applies a connect request to the instance and returns
+// the resulting event string and any discarded (unknown) event names. Settings
+// omitted from the JSON body keep their saved values.
+func applyConnectSettings(data *ConnectStruct, instance *instance_model.Instance) (string, []string) {
+	if data == nil {
+		// Corpo JSON "null": trata como corpo vazio (preserva tudo).
+		data = &ConnectStruct{present: map[string]bool{}}
+	}
+
 	var subscribedEvents []string
+	var discarded []string
 
-	i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
-
-	if len(data.Subscribe) == 0 {
+	if !data.has("subscribe") && instance.Events != "" {
+		// subscribe omitido: mantém as inscrições salvas.
+		subscribedEvents = strings.Split(instance.Events, ",")
+	} else if len(data.Subscribe) == 0 {
 		subscribedEvents = append(subscribedEvents, event_types.MESSAGE)
 	} else if len(data.Subscribe) > 0 && data.Subscribe[0] == "ALL" {
 		for _, event := range event_types.AllEventTypes {
@@ -227,7 +265,7 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	} else {
 		for _, arg := range data.Subscribe {
 			if !event_types.IsEventType(arg) {
-				i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Message type discarded '%s'", instance.Id, arg)
+				discarded = append(discarded, arg)
 				continue
 			}
 			subscribedEvents = append(subscribedEvents, arg)
@@ -236,11 +274,33 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 
 	eventString := strings.Join(subscribedEvents, ",")
 
+	// Só sobrescreve o que veio no corpo: um connect parcial (ex.: só
+	// {"immediate": true}) não deve apagar webhook nem produtores salvos.
 	instance.Events = eventString
-	instance.Webhook = data.WebhookUrl
-	instance.RabbitmqEnable = data.RabbitmqEnable
-	instance.NatsEnable = data.NatsEnable
-	instance.WebSocketEnable = data.WebSocketEnable
+	if data.has("webhookUrl") {
+		instance.Webhook = data.WebhookUrl
+	}
+	if data.has("rabbitmqEnable") {
+		instance.RabbitmqEnable = data.RabbitmqEnable
+	}
+	if data.has("natsEnable") {
+		instance.NatsEnable = data.NatsEnable
+	}
+	if data.has("websocketEnable") {
+		instance.WebSocketEnable = data.WebSocketEnable
+	}
+
+	return eventString, discarded
+}
+
+func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instance) (*instance_model.Instance, string, string, error) {
+	if data != nil {
+		i.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Processing subscribe events: %v", instance.Id, data.Subscribe)
+	}
+	eventString, discarded := applyConnectSettings(data, instance)
+	for _, arg := range discarded {
+		i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Message type discarded '%s'", instance.Id, arg)
+	}
 
 	err := i.instanceRepository.Update(instance)
 	if err != nil {
@@ -250,7 +310,7 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 
 	// Um ponteiro existente não significa que a instância está operacional. Um
 	// cliente desconectado deve passar pelo restart controlado.
-	client := i.clientPointer[instance.Id]
+	client := i.whatsmeowService.GetClient(instance.Id)
 	isInstanceRunning := client != nil && client.IsConnected()
 
 	// Sincroniza as configurações na instância em execução (se já estiver conectada)
@@ -284,8 +344,8 @@ func (i instances) Connect(data *ConnectStruct, instance *instance_model.Instanc
 	// logger.LogInfo("Waiting 1 seconds")
 	// time.Sleep(1000 * time.Millisecond)
 
-	// if i.clientPointer[instance.Id] != nil {
-	// 	if !i.clientPointer[instance.Id].IsConnected() {
+	// if i.whatsmeowService.GetClient(instance.Id) != nil {
+	// 	if !i.whatsmeowService.GetClient(instance.Id).IsConnected() {
 	// 		return instance, "", "", fmt.Errorf("failed to connect")
 	// 	}
 	// } else {
@@ -364,7 +424,7 @@ func (i instances) Logout(instance *instance_model.Instance) (*instance_model.In
 }
 
 func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, error) {
-	client := i.clientPointer[instance.Id]
+	client := i.whatsmeowService.GetClient(instance.Id)
 
 	if client == nil {
 		return &StatusStruct{
@@ -393,7 +453,7 @@ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, err
 
 func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, error) {
 	logger := i.loggerWrapper.GetLogger(instance.Id)
-	client := i.clientPointer[instance.Id]
+	client := i.whatsmeowService.GetClient(instance.Id)
 
 	// Nunca reinicie uma sessão autenticada apenas para consultar o QR code.
 	// Frontends normalmente fazem polling deste endpoint durante o pareamento;
@@ -431,7 +491,7 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
 		time.Sleep(3 * time.Second)
 
 		// Verificar novamente se há cliente
-		client = i.clientPointer[instance.Id]
+		client = i.whatsmeowService.GetClient(instance.Id)
 		if client != nil && client.IsLoggedIn() {
 			return nil, ErrSessionAlreadyLoggedIn
 		}
@@ -507,7 +567,7 @@ func buildPasskeyOpenURL(token string) string {
 
 func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*PairReturnStruct, error) {
 	logger := i.loggerWrapper.GetLogger(instance.Id)
-	client := i.clientPointer[instance.Id]
+	client := i.whatsmeowService.GetClient(instance.Id)
 
 	if client == nil || !client.IsConnected() {
 		if client != nil && client.IsLoggedIn() {
@@ -527,7 +587,7 @@ func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*P
 		// Wait for the WA websocket connection and initial QR generation to establish.
 		// PairPhone must be called after the QR event is received per whatsmeow docs.
 		time.Sleep(3 * time.Second)
-		client = i.clientPointer[instance.Id]
+		client = i.whatsmeowService.GetClient(instance.Id)
 		if client == nil {
 			return nil, fmt.Errorf("failed to initialize client for pairing")
 		}
@@ -553,7 +613,7 @@ func (i instances) GetAll() ([]*instance_model.Instance, error) {
 	}
 
 	for _, instance := range instances {
-		if client := i.clientPointer[instance.Id]; client != nil {
+		if client := i.whatsmeowService.GetClient(instance.Id); client != nil {
 			instance.Connected = client.IsLoggedIn()
 		} else {
 			instance.Connected = false
@@ -572,7 +632,7 @@ func (i instances) Info(instanceId string) (*instance_model.Instance, error) {
 	}
 
 	// Atualiza o status connected com base no estado real do cliente
-	if client := i.clientPointer[instance.Id]; client != nil {
+	if client := i.whatsmeowService.GetClient(instance.Id); client != nil {
 		instance.Connected = client.IsLoggedIn()
 	} else {
 		instance.Connected = false
@@ -589,7 +649,7 @@ func (i instances) Delete(id string) error {
 		return err
 	}
 
-	if client := i.clientPointer[instance.Id]; client != nil {
+	if client := i.whatsmeowService.GetClient(instance.Id); client != nil {
 		if client.IsConnected() && client.IsLoggedIn() {
 			if err := client.Logout(context.Background()); err != nil {
 				i.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Failed to logout before deletion: %v", instance.Id, err)
@@ -882,7 +942,6 @@ func NewInstanceService(
 ) InstanceService {
 	return &instances{
 		instanceRepository: instanceRepository,
-		clientPointer:      clientPointer,
 		whatsmeowService:   whatsmeowService,
 		config:             config,
 		loggerWrapper:      loggerWrapper,
