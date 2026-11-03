@@ -1,13 +1,13 @@
 package whatsmeow_service
 
 import (
-	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
-// decryptPollVoteWithOriginalInfo descriptografa um voto de enquete usando o
-// MessageInfo original (antes do nosso swap LID -> telefone).
+// decryptWithOriginalInfo descriptografa um "message secret" (voto de enquete,
+// edição cifrada, ...) usando o MessageInfo original (antes do nosso swap
+// LID -> telefone).
 //
 // A chave do voto é derivada da identidade do votante (Info.Sender) e o segredo
 // da enquete é buscado por Info.Chat. O WhatsApp usa a identidade @lid; depois do
@@ -16,22 +16,22 @@ import (
 // Info original e, se falhar e ele for diferente, com o Info atual. O evento
 // recebido não é alterado, então o voto continua salvo com o número real.
 // Ref.: fork Aryzonna eba29515 (lá só o Sender era revertido).
-func decryptPollVoteWithOriginalInfo(
+func decryptWithOriginalInfo[T any](
 	evt *events.Message,
 	rawInfo types.MessageInfo,
-	decrypt func(*events.Message) (*waE2E.PollVoteMessage, error),
-) (*waE2E.PollVoteMessage, error) {
+	decrypt func(*events.Message) (T, error),
+) (T, error) {
 	original := *evt
 	original.Info = rawInfo
-	vote, err := decrypt(&original)
+	out, err := decrypt(&original)
 	if err == nil {
-		return vote, nil
+		return out, nil
 	}
 	if rawInfo.Sender == evt.Info.Sender && rawInfo.Chat == evt.Info.Chat {
-		return nil, err
+		return out, err
 	}
-	if vote, retryErr := decrypt(evt); retryErr == nil {
-		return vote, nil
+	if retry, retryErr := decrypt(evt); retryErr == nil {
+		return retry, nil
 	}
-	return nil, err
+	return out, err
 }

@@ -38,7 +38,7 @@ func TestPollVoteDecryptsWithPreSwapInfo(t *testing.T) {
 	evt, raw := swappedEvent()
 	var calls []types.MessageInfo
 
-	vote, err := decryptPollVoteWithOriginalInfo(evt, raw, fakeDecrypt(&calls))
+	vote, err := decryptWithOriginalInfo(evt, raw, fakeDecrypt(&calls))
 	if err != nil || vote == nil {
 		t.Fatalf("expected vote decrypted with original @lid info, got err=%v", err)
 	}
@@ -61,7 +61,7 @@ func TestPollVoteFallsBackToCurrentInfo(t *testing.T) {
 		}
 		return nil, errMAC
 	}
-	if _, err := decryptPollVoteWithOriginalInfo(evt, raw, dec); err != nil {
+	if _, err := decryptWithOriginalInfo(evt, raw, dec); err != nil {
 		t.Fatalf("fallback to current info should succeed: %v", err)
 	}
 	if len(calls) != 2 {
@@ -73,7 +73,7 @@ func TestPollVoteNoRetryWhenInfoUnchanged(t *testing.T) {
 	info := types.MessageInfo{MessageSource: types.MessageSource{Sender: voterPhone, Chat: voterPhone}}
 	evt := &events.Message{Info: info}
 	var calls []types.MessageInfo
-	if _, err := decryptPollVoteWithOriginalInfo(evt, info, fakeDecrypt(&calls)); !errors.Is(err, errMAC) {
+	if _, err := decryptWithOriginalInfo(evt, info, fakeDecrypt(&calls)); !errors.Is(err, errMAC) {
 		t.Fatalf("expected original error, got %v", err)
 	}
 	if len(calls) != 1 {
