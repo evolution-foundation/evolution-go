@@ -1,4 +1,4 @@
-name: Verify and publish WhatsApp 405 fix
+name: Verify and publish WhatsApp lifecycle fix
 
 on:
   pull_request:
@@ -9,10 +9,11 @@ on:
     branches:
       - codex/fix-auth-pool
       - codex/fix-wa-version-auth-pool
+      - codex/fix-whatsmeow-lifecycle
   workflow_dispatch:
 
 concurrency:
-  group: publish-fix-405-${{ github.ref }}
+  group: publish-lifecycle-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -20,7 +21,7 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/jadercarvalhoprm/evolution-go-auth-pool
-  ROLLBACK_IMAGE: ghcr.io/jadercarvalhoprm/evolution-go-auth-pool@sha256:645e5bde7f97e3928f5a7d94cd8c37cbf79de7a595be684e26fb76db2d5a35fa
+  ROLLBACK_IMAGE: ghcr.io/jadercarvalhoprm/evolution-go-auth-pool:fix-405@sha256:1cfec91d7ff9ed2627cc5e50dbb89a0937d7029e79609653d0caaf9563bea8fb
 
 jobs:
   verify-go:
@@ -87,7 +88,7 @@ jobs:
           load: true
           push: false
           tags: local/evolution-go:e2e-${{ github.sha }}
-          build-args: VERSION=0.7.2-authpool-fix405-${{ github.sha }}
+          build-args: VERSION=0.7.2-authpool-fix405-lifecycle-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -150,9 +151,9 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=short,prefix=sha-
-            type=raw,value=fix-405
+            type=raw,value=fix-lifecycle
           labels: |
-            org.opencontainers.image.title=Evolution Go auth pool with WhatsApp 405 fix
+            org.opencontainers.image.title=Evolution Go auth pool with WhatsApp lifecycle fix
             org.opencontainers.image.source=https://github.com/jadercarvalhoPRM/evolution-go
             org.opencontainers.image.revision=${{ github.sha }}
 
@@ -166,7 +167,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=0.7.2-authpool-fix405-${{ github.sha }}
+          build-args: VERSION=0.7.2-authpool-fix405-lifecycle-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
