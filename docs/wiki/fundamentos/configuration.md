@@ -203,7 +203,7 @@ LOG_COMPRESS=true
 Conecta automaticamente, ao iniciar o servidor, todas as instâncias **pareadas** (com `jid` salvo), mesmo as que estavam desconectadas — inclusive as paradas via `/instance/disconnect`. Para que uma instância não volte no próximo restart, use `/instance/logout`. Instâncias cuja sessão do WhatsApp não existe mais no banco de auth são ignoradas com o aviso "Stored WhatsApp session not found" e precisam de um QR novo.
 
 - **Tipo**: Boolean
-- **Padrão**: `false`
+- **Padrão**: `true` (quando a variável não está definida)
 
 ```env
 CONNECT_ON_STARTUP=false

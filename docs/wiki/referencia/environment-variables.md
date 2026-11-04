@@ -58,7 +58,7 @@ POSTGRES_USERS_DB=postgresql://user:pass@host:5432/evogo_users?sslmode=disable
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `CONNECT_ON_STARTUP` | `false` | Ao iniciar, conecta todas as instâncias pareadas (inclusive as paradas via disconnect; use logout para impedir) |
+| `CONNECT_ON_STARTUP` | `true` | Ao iniciar, conecta todas as instâncias pareadas (inclusive as paradas via disconnect; use logout para impedir) |
 | `WEBHOOK_FILES` | `true` | Enviar URLs de mídia em webhooks |
 | `QRCODE_MAX_COUNT` | `5` | Tentativas máximas de QR Code |
 | `CHECK_USER_EXISTS` | `true` | Validar destinatário antes de enviar |
