@@ -24,7 +24,10 @@ import (
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
+	"gorm.io/gorm"
 )
+
+var ErrInstanceNotFound = errors.New("instance not found")
 
 type InstanceService interface {
 	Create(data *CreateStruct) (*instance_model.Instance, error)
@@ -599,14 +602,24 @@ func (i instances) hasProxy(rawProxy string) bool {
 func (i instances) Delete(id string) error {
 	instance, err := i.instanceRepository.GetInstanceByID(id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || strings.HasPrefix(err.Error(), "invalid UUID format") {
+			return ErrInstanceNotFound
+		}
 		return err
 	}
 
-	if i.clientPointer.Get(instance.Id) != nil && i.clientPointer.Get(instance.Id).IsConnected() {
-		if i.clientPointer.Get(instance.Id).IsLoggedIn() {
-			i.clientPointer.Get(instance.Id).Logout(context.Background())
+	loggedOut := false
+	if client := i.clientPointer.Get(instance.Id); client != nil && client.IsConnected() {
+		if client.IsLoggedIn() {
+			loggedOut = client.Logout(context.Background()) == nil
 		}
-		i.clientPointer.Get(instance.Id).Disconnect()
+		client.Disconnect()
+	}
+
+	if !loggedOut && instance.Jid != "" {
+		if err := i.whatsmeowService.DeleteDeviceStore(instance.Jid); err != nil {
+			return err
+		}
 	}
 
 	// Limpar todos os recursos da instância antes de deletar
