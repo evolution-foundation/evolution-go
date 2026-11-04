@@ -816,6 +816,8 @@ func (w whatsmeowService) applyHandshakeVersion(instanceId string, v clientVersi
 	}
 
 	store.SetWAVersion(next)
+	// The vendored whatsmeow-lib's SetWAVersion does not refresh the payload's AppVersion (upstream does).
+	store.BaseClientPayload.UserAgent.AppVersion = next.ProtoAppVersion()
 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Handshake WhatsApp version set to %s (was %s)", instanceId, next.String(), current.String())
 }
 
