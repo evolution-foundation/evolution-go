@@ -1,6 +1,7 @@
 package instance_handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -386,6 +387,7 @@ func (i *instanceHandler) Info(ctx *gin.Context) {
 // @Param instanceId path string true "Instance Id"
 // @Success 200 {object} gin.H "Instance deleted successfully"
 // @Failure 400 {object} gin.H "Error on validation"
+// @Failure 404 {object} gin.H "Instance not found"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/delete/{instanceId} [delete]
 func (i *instanceHandler) Delete(ctx *gin.Context) {
@@ -397,6 +399,10 @@ func (i *instanceHandler) Delete(ctx *gin.Context) {
 	}
 
 	err := i.instanceService.Delete(instanceId)
+	if errors.Is(err, instance_service.ErrInstanceNotFound) {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

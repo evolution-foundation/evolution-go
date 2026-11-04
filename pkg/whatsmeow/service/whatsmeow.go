@@ -57,6 +57,7 @@ type WhatsmeowService interface {
 	StartInstance(instanceId string) error
 	ReconnectClient(instanceId string) error
 	ClearInstanceCache(instanceId string, token string) error
+	DeleteDeviceStore(jid string) error
 	CallWebhook(instance *instance_model.Instance, queueName string, jsonData []byte)
 	SendToGlobalQueues(event string, jsonData []byte, userId string)
 	ForceUpdateJid(instanceId string, number string) error
@@ -2840,6 +2841,22 @@ func (w whatsmeowService) UpdateInstanceAdvancedSettings(instanceId string) erro
 
 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Advanced settings updated in runtime successfully", instanceId)
 	return nil
+}
+
+func (w *whatsmeowService) DeleteDeviceStore(jid string) error {
+	container, err := w.getStoreContainer()
+	if err != nil {
+		return err
+	}
+	parsed, _ := utils.ParseJID(jid)
+	device, err := container.GetDevice(context.Background(), parsed)
+	if err != nil {
+		return err
+	}
+	if device == nil {
+		return nil
+	}
+	return device.Delete(context.Background())
 }
 
 func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) error {
