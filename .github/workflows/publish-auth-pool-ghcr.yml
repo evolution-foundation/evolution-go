@@ -1,0 +1,192 @@
+name: Verify and publish WhatsApp lifecycle fix
+
+on:
+  pull_request:
+    branches:
+      - main
+      - codex/fix-auth-pool
+  push:
+    branches:
+      - codex/fix-auth-pool
+      - codex/fix-wa-version-auth-pool
+      - codex/fix-whatsmeow-lifecycle
+  workflow_dispatch:
+
+concurrency:
+  group: publish-lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/jadercarvalhoprm/evolution-go-auth-pool
+  ROLLBACK_IMAGE: ghcr.io/jadercarvalhoprm/evolution-go-auth-pool:fix-405@sha256:1cfec91d7ff9ed2627cc5e50dbb89a0937d7029e79609653d0caaf9563bea8fb
+
+jobs:
+  verify-go:
+    name: Go tests, build, and real WhatsApp QR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libjpeg-dev libwebp-dev
+
+      - name: Test all packages
+        run: go test ./...
+
+      - name: Vet all packages
+        run: go vet ./...
+
+      - name: Race-test all packages
+        run: go test -race ./...
+
+      - name: Build server
+        run: go build -o "${RUNNER_TEMP}/evolution-go" ./cmd/evolution-go
+
+      - name: Exercise real WhatsApp protocol until QR
+        env:
+          EVOLUTION_GO_WA_INTEGRATION: '1'
+        run: |
+          mkdir -p evidence/ci
+          go test ./pkg/whatsmeow/service \
+            -run '^TestIntegrationDynamicVersionReachesRealWhatsmeowQR$' \
+            -count=1 -v 2>&1 | tee evidence/ci/real-whatsmeow-qr.log
+
+      - name: Upload redacted protocol evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: real-whatsmeow-qr-${{ github.run_id }}
+          path: evidence/ci/real-whatsmeow-qr.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  image-gates:
+    name: Runtime image smoke and vulnerability scan
+    needs: verify-go
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build amd64 release candidate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: local/evolution-go:e2e-${{ github.sha }}
+          build-args: VERSION=0.7.2-authpool-fix405-lifecycle-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke PostgreSQL, Redis, and API readiness
+        env:
+          E2E_IMAGE: local/evolution-go:e2e-${{ github.sha }}
+          E2E_ARTIFACT_DIR: ${{ runner.temp }}/evolution-go-runtime
+        run: ./docker/ci/smoke-runtime.sh
+
+      - name: Upload sanitized runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-smoke-sanitized-${{ github.run_id }}
+          path: ${{ runner.temp }}/evolution-go-runtime/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Scan release candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/evolution-go:e2e-${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+  publish:
+    name: Publish multiarch image with supply-chain metadata
+    if: github.event_name != 'pull_request'
+    needs:
+      - verify-go
+      - image-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute immutable and channel tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=fix-lifecycle
+          labels: |
+            org.opencontainers.image.title=Evolution Go auth pool with WhatsApp lifecycle fix
+            org.opencontainers.image.source=https://github.com/jadercarvalhoPRM/evolution-go
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push multiarch image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=0.7.2-authpool-fix405-lifecycle-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record publication and rollback references
+        env:
+          PUBLISHED_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo '### GHCR publication'
+            echo
+            echo "Published: \`${IMAGE_NAME}@${PUBLISHED_DIGEST}\`"
+            echo "Rollback (preserved): \`${ROLLBACK_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

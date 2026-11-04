@@ -1,0 +1,9 @@
+$ EVOLUTION_GO_WA_INTEGRATION=1 go test ./pkg/whatsmeow/service -run '^TestIntegrationDynamicVersionReachesRealWhatsmeowQR$' -count=1 -v
+=== RUN   TestIntegrationDynamicVersionReachesRealWhatsmeowQR
+    wa_version_integration_test.go:72: real QR event received; QR payload redacted; fetched/applied version=2.3000.1052878631
+--- PASS: TestIntegrationDynamicVersionReachesRealWhatsmeowQR (1.43s)
+PASS
+ok  github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service 1.655s
+exit status: 0
+
+# The ephemeral QR payload was intentionally not logged or persisted.

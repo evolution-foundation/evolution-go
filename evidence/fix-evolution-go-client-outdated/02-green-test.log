@@ -1,0 +1,8 @@
+$ go test ./pkg/whatsmeow/service -run 'TestApplyDynamicWAVersionUpdatesHandshakeState|TestApplyInvalidWAVersionLeavesHandshakeStateUnchanged' -count=1 -v
+=== RUN   TestApplyDynamicWAVersionUpdatesHandshakeState
+--- PASS: TestApplyDynamicWAVersionUpdatesHandshakeState (0.00s)
+=== RUN   TestApplyInvalidWAVersionLeavesHandshakeStateUnchanged
+--- PASS: TestApplyInvalidWAVersionLeavesHandshakeStateUnchanged (0.00s)
+PASS
+ok  github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service 0.304s
+exit status: 0

@@ -1,0 +1,11 @@
+$ go test ./pkg/whatsmeow/service -run '^TestExactProductionMismatchUpdatesHandshakeState$' -count=1 -v
+=== RUN   TestExactProductionMismatchUpdatesHandshakeState
+    wa_version_exact_red_test.go:17: store.GetWAVersion() = 2.3000.1042386815, want dynamically fetched 2.3000.1052878631
+--- FAIL: TestExactProductionMismatchUpdatesHandshakeState (0.00s)
+FAIL
+FAIL github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service 0.326s
+FAIL
+exit status: 1
+
+# Reproduced independently against base commit 1fafa80279fc19a19f80d3635aea77a21b7d1c25
+# after a behavior-preserving extraction of the existing DeviceProps assignment.

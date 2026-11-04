@@ -379,8 +379,17 @@ type MessageSendStruct struct {
 	MessageContextInfo *waE2E.ContextInfo
 }
 
+type connectionState interface {
+	IsConnected() bool
+	IsLoggedIn() bool
+}
+
+func clientSessionReady(client connectionState) bool {
+	return client != nil && client.IsConnected() && client.IsLoggedIn()
+}
+
 func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := s.clientPointer[instanceId]
+	client := s.whatsmeowService.GetClient(instanceId)
 	s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -394,27 +403,27 @@ func (s *sendService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
 		s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = s.clientPointer[instanceId]
+		client = s.whatsmeowService.GetClient(instanceId)
 		s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
 			client != nil && client.IsConnected())
 
-		if client == nil || !client.IsConnected() {
+		if !clientSessionReady(client) {
 			s.loggerWrapper.GetLogger(instanceId).LogError("[%s] New client validation failed - Exists: %v, Connected: %v",
 				instanceId,
 				client != nil,
 				client != nil && client.IsConnected())
 			return nil, errors.New("no active session found")
 		}
-	} else if !client.IsConnected() {
+	} else if !clientSessionReady(client) {
 		s.loggerWrapper.GetLogger(instanceId).LogError("[%s] Existing client is disconnected - Connected status: %v",
 			instanceId,
 			client.IsConnected())
 		return nil, errors.New("client disconnected")
 	}
 
-	s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client successfully validated - Connected: %v", instanceId, client.IsConnected())
+	s.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client successfully validated - Connected: %v, LoggedIn: %v", instanceId, client.IsConnected(), client.IsLoggedIn())
 	return client, nil
 }
 
@@ -555,7 +564,7 @@ func (s *sendService) validateAndCheckUserExists(phone string, formatJid *bool, 
 		return types.NewJID("", types.DefaultUserServer), fmt.Errorf("number %s is not registered on WhatsApp", phone)
 	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Number %s verified as valid WhatsApp user, using remoteJID: %s", instance.Id, phone, remoteJID)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Recipient verified as a valid WhatsApp user", instance.Id)
 
 	// Validate the remoteJID with formatJid=false for message sending
 	formatJidFalse := false
@@ -1225,7 +1234,7 @@ func (s *sendService) SendMediaUrl(data *MediaStruct, instance *instance_model.I
 
 func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instance_model.Instance, maxRetries int) (*MessageSendStruct, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMediaUrl attempt %d/%d for URL: %s", instance.Id, attempt, maxRetries, data.Url)
+		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMediaUrl attempt %d/%d", instance.Id, attempt, maxRetries)
 		startTime := time.Now()
 
 		client, err := s.ensureClientConnectedWithRetry(instance.Id, 2)
@@ -1236,7 +1245,7 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 			continue
 		}
 
-		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Iniciando download da URL: %s", instance.Id, data.Url)
+		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Iniciando download de mídia", instance.Id)
 
 		resp, err := http.Get(data.Url)
 		if err != nil {
@@ -2343,12 +2352,16 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 		return nil, err
 	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] List sent to %s", instance.Id, data.Number)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] List sent", instance.Id)
 	return message, nil
 }
 
 func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.Message, messageType string, data *SendDataStruct) (*MessageSendStruct, error) {
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMessage called for number: %s, type: %s", instance.Id, data.Number, messageType)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] SendMessage called, type: %s", instance.Id, messageType)
+	client := s.whatsmeowService.GetClient(instance.Id)
+	if !clientSessionReady(client) {
+		return nil, errors.New("client disconnected")
+	}
 
 	recipient, err := s.validateAndCheckUserExists(data.Number, data.FormatJid, &data.Quoted.MessageID, &data.Quoted.MessageID, instance)
 	if err != nil {
@@ -2356,11 +2369,11 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 		return nil, err
 	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Recipient validated: %s (Server: %s)", instance.Id, recipient.String(), recipient.Server)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Recipient validated (server: %s)", instance.Id, recipient.Server)
 
 	var message string
 	if data.Id == "" {
-		message = s.clientPointer[instance.Id].GenerateMessageID()
+		message = client.GenerateMessageID()
 	} else {
 		message = data.Id
 	}
@@ -2371,14 +2384,14 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 			media = "audio"
 		}
 
-		err := s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
+		err := client.SendChatPresence(context.Background(), recipient, types.ChatPresence("composing"), types.ChatPresenceMedia(media))
 		if err != nil {
 			return nil, err
 		}
 
 		time.Sleep(time.Duration(data.Delay) * time.Millisecond)
 
-		err = s.clientPointer[instance.Id].SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
+		err = client.SendChatPresence(context.Background(), recipient, types.ChatPresence("paused"), types.ChatPresenceMedia(media))
 		if err != nil {
 			return nil, err
 		}
@@ -2631,7 +2644,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	// Only try to get participants for actual groups, not newsletters
 	if isGroup && !isNewsletter {
 		if data.MentionAll {
-			groupInfo, err := s.clientPointer[instance.Id].GetGroupInfo(context.Background(), recipient)
+			groupInfo, err := client.GetGroupInfo(context.Background(), recipient)
 			if err != nil {
 				return nil, err
 			}
@@ -2753,8 +2766,11 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	}
 
 	recipient.User = strings.ReplaceAll(recipient.User, "+", "")
+	if !s.whatsmeowService.IsCurrentClient(instance.Id, client) || !clientSessionReady(client) {
+		return nil, errors.New("no active session found")
+	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Sending message to %s with ID %s", instance.Id, recipient.String(), message)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Sending message with ID %s", instance.Id, message)
 
 	// Preparar extra parameters para o envio
 	sendExtra := whatsmeow.SendRequestExtra{ID: message}
@@ -2770,7 +2786,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 		sendExtra.AdditionalNodes = data.AdditionalNodes
 	}
 
-	response, err := s.clientPointer[instance.Id].SendMessage(context.Background(), recipient, msg, sendExtra)
+	response, err := client.SendMessage(context.Background(), recipient, msg, sendExtra)
 	if err != nil {
 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending message: %v", instance.Id, err)
 		return nil, err
@@ -2781,7 +2797,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 	messageInfo := types.MessageInfo{
 		MessageSource: types.MessageSource{
 			Chat:     recipient,
-			Sender:   *s.clientPointer[instance.Id].Store.ID,
+			Sender:   *client.Store.ID,
 			IsFromMe: true,
 			IsGroup:  isGroup,
 		},
@@ -2835,15 +2851,15 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 		sticker := msg.GetStickerMessage()
 
 		if img != nil {
-			data, err = s.clientPointer[instance.Id].Download(context.Background(), img)
+			data, err = client.Download(context.Background(), img)
 		} else if audio != nil {
-			data, err = s.clientPointer[instance.Id].Download(context.Background(), audio)
+			data, err = client.Download(context.Background(), audio)
 		} else if document != nil {
-			data, err = s.clientPointer[instance.Id].Download(context.Background(), document)
+			data, err = client.Download(context.Background(), document)
 		} else if video != nil {
-			data, err = s.clientPointer[instance.Id].Download(context.Background(), video)
+			data, err = client.Download(context.Background(), video)
 		} else if sticker != nil {
-			data, err = s.clientPointer[instance.Id].Download(context.Background(), sticker)
+			data, err = client.Download(context.Background(), sticker)
 
 			webpReader := bytes.NewReader(data)
 			img, err := webp.Decode(webpReader)
@@ -2892,7 +2908,7 @@ func (s *sendService) SendMessage(instance *instance_model.Instance, msg *waE2E.
 		go s.whatsmeowService.SendToGlobalQueues(postMap["event"].(string), values, instance.Id)
 	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to %s", instance.Id, data.Number)
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent", instance.Id)
 	return messageSent, nil
 }
 
@@ -2924,7 +2940,7 @@ func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_mode
 	cards := make([]*waE2E.InteractiveMessage, len(data.Cards))
 	messageVersion := int32(1)
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Building carousel for %s with %d cards", instance.Id, recipient.String(), len(data.Cards))
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Building carousel for server %s with %d cards", instance.Id, recipient.Server, len(data.Cards))
 
 	for i, card := range data.Cards {
 		// Each card MUST have both header and body for carousel to work
@@ -3116,7 +3132,7 @@ func (s *sendService) SendCarousel(data *CarouselStruct, instance *instance_mode
 		return nil, err
 	}
 
-	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Carousel sent to %s with %d cards", instance.Id, data.Number, len(data.Cards))
+	s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Carousel sent with %d cards", instance.Id, len(data.Cards))
 	return message, nil
 }
 

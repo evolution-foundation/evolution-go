@@ -95,7 +95,7 @@ type MessageSendStruct struct {
 }
 
 func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := m.clientPointer[instanceId]
+	client := m.whatsmeowService.GetClient(instanceId)
 	m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -109,7 +109,7 @@ func (m *messageService) ensureClientConnected(instanceId string) (*whatsmeow.Cl
 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = m.clientPointer[instanceId]
+		client = m.whatsmeowService.GetClient(instanceId)
 		m.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -301,7 +301,7 @@ func (m *messageService) ChatPresence(data *ChatPresenceStruct, instance *instan
 		}
 	}
 
-	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Presence (%s) sent to %s", data.State, data.Number)
+	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Presence state %s sent", data.State)
 
 	return ts.String(), nil
 }
@@ -478,7 +478,7 @@ func (m *messageService) DeleteMessageEveryone(data *MessageStruct, instance *in
 		return "", "", errors.New("invalid phone number")
 	}
 
-	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Revoking message %s from %s", data.MessageID, recipient)
+	m.loggerWrapper.GetLogger(instance.Id).LogInfo("Revoking message %s", data.MessageID)
 
 	resp, err := client.SendMessage(
 		context.Background(),

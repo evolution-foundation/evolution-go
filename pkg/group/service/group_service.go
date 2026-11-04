@@ -117,7 +117,7 @@ type UpdateGroupRequestParticipantsStruct struct {
 }
 
 func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := g.clientPointer[instanceId]
+	client := g.whatsmeowService.GetClient(instanceId)
 	g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -131,7 +131,7 @@ func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Clie
 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = g.clientPointer[instanceId]
+		client = g.whatsmeowService.GetClient(instanceId)
 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -282,7 +282,7 @@ func (g *groupService) SetGroupName(data *SetGroupNameStruct, instance *instance
 		return errors.New("invalid group jid")
 	}
 
-	g.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Attempting to set group name for %s", instance.Id, recipient.String())
+	g.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Attempting to set group name", instance.Id)
 
 	err = client.SetGroupName(context.Background(), recipient, data.Name)
 	if err != nil {
@@ -310,7 +310,7 @@ func (g *groupService) SetGroupDescription(data *SetGroupDescriptionStruct, inst
 		return errors.New("invalid group jid")
 	}
 
-	g.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Attempting to set group description for %s", instance.Id, recipient.String())
+	g.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Attempting to set group description", instance.Id)
 
 	// Use SetGroupTopic instead of SetGroupDescription (proper WhatsApp method)
 	// Empty strings for previousID and newID will be auto-filled by the library
@@ -624,7 +624,7 @@ func (g *groupService) UpdateGroupRequestParticipants(data *UpdateGroupRequestPa
 	for _, participant := range data.Participants {
 		participantJID, ok := utils.ParseJID(participant)
 		if !ok {
-			g.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating participant jid: %s", instance.Id, participant)
+			g.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error validating participant identity", instance.Id)
 			return nil, errors.New("invalid participant jid: " + participant)
 		}
 		participants = append(participants, participantJID)
