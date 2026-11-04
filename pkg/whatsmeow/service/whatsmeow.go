@@ -381,6 +381,11 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
+	w.applyHandshakeVersion(cd.Instance.Id, waVersionFloor, false)
+	if version.Major != 0 {
+		w.applyHandshakeVersion(cd.Instance.Id, version, w.config.WhatsappVersionMajor != 0)
+	}
+
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
 	minLevel := w.config.WaDebug
@@ -791,6 +796,38 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			time.Sleep(1000 * time.Millisecond)
 		}
 	}
+}
+
+var waVersionMu sync.Mutex
+
+// Used when the WhatsApp Web lookup fails, so startup never falls back to the library's stale default.
+var waVersionFloor = clientVersion{Major: 2, Minor: 3000, Patch: 1052556849}
+
+// The handshake sends whatsmeow's global waVersion; DeviceProps.Version does not change it,
+// so a stale built-in version gets rejected with "Client outdated (405)".
+func (w whatsmeowService) applyHandshakeVersion(instanceId string, v clientVersion, force bool) {
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+
+	next := store.WAVersionContainer{uint32(v.Major), uint32(v.Minor), uint32(v.Patch)}
+	current := store.GetWAVersion()
+	if next == current || (!force && !isNewerWAVersion(next, current)) {
+		return
+	}
+
+	store.SetWAVersion(next)
+	// The vendored whatsmeow-lib's SetWAVersion does not refresh the payload's AppVersion (upstream does).
+	store.BaseClientPayload.UserAgent.AppVersion = next.ProtoAppVersion()
+	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Handshake WhatsApp version set to %s (was %s)", instanceId, next.String(), current.String())
+}
+
+func isNewerWAVersion(a, b store.WAVersionContainer) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] > b[i]
+		}
+	}
+	return false
 }
 
 func schedulePresenceUpdates(mycli *MyClient) {
