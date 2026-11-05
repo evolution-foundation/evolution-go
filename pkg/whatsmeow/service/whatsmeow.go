@@ -783,6 +783,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 				go mycli.service.SendToGlobalQueues(postMap["event"].(string), values, mycli.userID)
 			}
 
+			// Without a paired device (QR timed out, logged out, or the phone removed this device) a restart would
+			// only create a new device and cycle QR codes forever. Stop here; the next /instance/connect or
+			// /instance/qr starts a fresh client.
+			if client.Store.ID == nil {
+				w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] No paired device; not restarting client", cd.Instance.Id)
+				return
+			}
+
 			// restart client
 			w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Restarting client", cd.Instance.Id)
 			w.StartClient(cd)
