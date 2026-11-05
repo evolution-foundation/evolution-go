@@ -279,7 +279,23 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
+// clientsStarting holds the instance IDs whose StartClient is between entry and registering the new client in
+// clientPointer. Without it, a second StartClient in that window (e.g. GET /instance/qr right after
+// POST /instance/connect, which starts the client in a goroutine) sees no client and starts another one.
+var clientsStarting sync.Map
+
 func (w whatsmeowService) StartClient(cd *ClientData) {
+
+	if _, starting := clientsStarting.LoadOrStore(cd.Instance.Id, struct{}{}); starting {
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Client start already in progress, skipping duplicate start", cd.Instance.Id)
+		return
+	}
+	registered := false
+	defer func() {
+		if !registered {
+			clientsStarting.Delete(cd.Instance.Id)
+		}
+	}()
 
 	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Starting websocket connection to Whatsapp for user '%s'", cd.Instance.Id)
 
@@ -391,6 +407,9 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
 	w.clientPointer[cd.Instance.Id] = client
+	// Registered: later callers see this client, and the restart below (which re-enters StartClient) must not be blocked.
+	clientsStarting.Delete(cd.Instance.Id)
+	registered = true
 
 	if cd.IsProxy {
 		var proxyConfig ProxyConfig
