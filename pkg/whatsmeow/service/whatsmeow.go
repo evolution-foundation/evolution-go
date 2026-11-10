@@ -87,6 +87,7 @@ type whatsmeowService struct {
 	userInfoCache      *cache.Cache
 	clientPointer      map[string]*whatsmeow.Client
 	myClientPointer    map[string]*MyClient
+	containerPointer   map[string]*sqlstore.Container
 	rabbitmqProducer   producer_interfaces.Producer
 	webhookProducer    producer_interfaces.Producer
 	websocketProducer  producer_interfaces.Producer
@@ -314,6 +315,16 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
+	// Fecha o container/pool de conexões da tentativa anterior antes de abrir um novo.
+	// Sem isso, cada reconexão (comum em quedas de websocket do WhatsApp) vazava um
+	// *sql.DB inteiro que nunca era fechado, esgotando o max_connections do Postgres.
+	if oldContainer, exists := w.containerPointer[cd.Instance.Id]; exists && oldContainer != nil {
+		if closeErr := oldContainer.Close(); closeErr != nil {
+			w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Failed to close previous container: %v", cd.Instance.Id, closeErr)
+		}
+		delete(w.containerPointer, cd.Instance.Id)
+	}
+
 	var container *sqlstore.Container
 
 	if w.config.WaDebug != "" {
@@ -337,6 +348,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
 		return
 	}
+
+	w.containerPointer[cd.Instance.Id] = container
 
 	if cd.Instance.Jid != "" {
 		jid, _ := utils.ParseJID(cd.Instance.Jid)
@@ -402,6 +415,16 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 			store.DeviceProps.Version.Tertiary = proto.Uint32(uint32(version.Patch))
 		}
 	}
+
+	// VM4 (10/11/2026): os dois ramos acima só gravam store.DeviceProps.Version, que vai
+	// no PAREAMENTO. A versão que o servidor do WhatsApp confere no login é a do
+	// ClientPayload (UserAgent.AppVersion), que a whatsmeow só troca com SetWAVersion.
+	// Sem isto, o log dizia "from web 2.3000.1053787253" e o cliente conectava com a
+	// versão fixa da biblioteca (2.3000.1042386815): 405 "client outdated", instância
+	// presa em "Reconnecting" e /instance/qr sem QR (sales e Fluxo, 26/10 a 10/11).
+	applyClientPayloadVersion(version, func(msg string) {
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] %s", cd.Instance.Id, msg)
+	})
 
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
@@ -2610,6 +2633,29 @@ var (
 	webVersionCacheTTL = 1 * time.Hour
 )
 
+// waVersionMu serializa SetWAVersion: a versão do ClientPayload é estado global da
+// whatsmeow e várias instâncias podem conectar ao mesmo tempo.
+var waVersionMu sync.Mutex
+
+// applyClientPayloadVersion aplica a versão escolhida (variáveis WHATSAPP_VERSION_* ou
+// a lida do WhatsApp Web) ao ClientPayload da whatsmeow, que é o que o servidor confere
+// no login. Versão zerada (sem variável e sem leitura da web) mantém a da biblioteca.
+// Devolve true quando aplicou.
+func applyClientPayloadVersion(v clientVersion, logf func(string)) bool {
+	if v.Major <= 0 || v.Minor <= 0 || v.Patch <= 0 {
+		logf(fmt.Sprintf("client payload version kept at library default %s", store.GetWAVersion().String()))
+		return false
+	}
+	nova := store.WAVersionContainer{uint32(v.Major), uint32(v.Minor), uint32(v.Patch)}
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+	if store.GetWAVersion() != nova {
+		store.SetWAVersion(nova)
+	}
+	logf(fmt.Sprintf("client payload version set to %s", store.GetWAVersion().String()))
+	return true
+}
+
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()
 	defer cachedWebVersionMu.Unlock()
@@ -2773,6 +2819,15 @@ func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) er
 		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Client pointer cleared", instanceId)
 	}
 
+	// Fechar e limpar containerPointer (pool de conexões com o banco) se existir
+	if container, exists := w.containerPointer[instanceId]; exists && container != nil {
+		if closeErr := container.Close(); closeErr != nil {
+			w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] Failed to close container: %v", instanceId, closeErr)
+		}
+		delete(w.containerPointer, instanceId)
+		w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Container pointer cleared", instanceId)
+	}
+
 	// Limpar killChannel se existir
 	if killChan, exists := w.killChannel[instanceId]; exists {
 		select {
@@ -2821,6 +2876,7 @@ func NewWhatsmeowService(
 		userInfoCache:      cache.New(5*time.Minute, 10*time.Minute),
 		clientPointer:      clientPointer,
 		myClientPointer:    make(map[string]*MyClient),
+		containerPointer:   make(map[string]*sqlstore.Container),
 		rabbitmqProducer:   rabbitmqProducer,
 		webhookProducer:    webhookProducer,
 		websocketProducer:  websocketProducer,
