@@ -416,6 +416,16 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
+	// VM4 (10/11/2026): os dois ramos acima só gravam store.DeviceProps.Version, que vai
+	// no PAREAMENTO. A versão que o servidor do WhatsApp confere no login é a do
+	// ClientPayload (UserAgent.AppVersion), que a whatsmeow só troca com SetWAVersion.
+	// Sem isto, o log dizia "from web 2.3000.1053787253" e o cliente conectava com a
+	// versão fixa da biblioteca (2.3000.1042386815): 405 "client outdated", instância
+	// presa em "Reconnecting" e /instance/qr sem QR (sales e Fluxo, 26/10 a 10/11).
+	applyClientPayloadVersion(version, func(msg string) {
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] %s", cd.Instance.Id, msg)
+	})
+
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
 	minLevel := w.config.WaDebug
@@ -2622,6 +2632,29 @@ var (
 	cachedWebVersionMu sync.Mutex
 	webVersionCacheTTL = 1 * time.Hour
 )
+
+// waVersionMu serializa SetWAVersion: a versão do ClientPayload é estado global da
+// whatsmeow e várias instâncias podem conectar ao mesmo tempo.
+var waVersionMu sync.Mutex
+
+// applyClientPayloadVersion aplica a versão escolhida (variáveis WHATSAPP_VERSION_* ou
+// a lida do WhatsApp Web) ao ClientPayload da whatsmeow, que é o que o servidor confere
+// no login. Versão zerada (sem variável e sem leitura da web) mantém a da biblioteca.
+// Devolve true quando aplicou.
+func applyClientPayloadVersion(v clientVersion, logf func(string)) bool {
+	if v.Major <= 0 || v.Minor <= 0 || v.Patch <= 0 {
+		logf(fmt.Sprintf("client payload version kept at library default %s", store.GetWAVersion().String()))
+		return false
+	}
+	nova := store.WAVersionContainer{uint32(v.Major), uint32(v.Minor), uint32(v.Patch)}
+	waVersionMu.Lock()
+	defer waVersionMu.Unlock()
+	if store.GetWAVersion() != nova {
+		store.SetWAVersion(nova)
+	}
+	logf(fmt.Sprintf("client payload version set to %s", store.GetWAVersion().String()))
+	return true
+}
 
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()

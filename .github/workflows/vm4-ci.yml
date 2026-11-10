@@ -1,0 +1,25 @@
+# VM4 (10/11/2026): o fork não tinha CI de teste, só a publicação da imagem upstream.
+# O am-sales compila a imagem vm4-evolution-go a partir deste fork; a regra do VM4 é
+# nunca mergear sem checagem. Mesma versão de Go do Dockerfile da imagem (1.25.0).
+name: vm4-ci
+
+on:
+  pull_request:
+  push:
+    branches: [fix/close-container-on-reconnect]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go build, vet e test -race
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.0'
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
