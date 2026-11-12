@@ -129,6 +129,97 @@ type MyClient struct {
 	loggerWrapper      *logger_wrapper.LoggerManager
 	qrcodeCount        int
 	passkeyCeremony    *ceremony.Store
+	appStateRecoveryMu sync.Mutex
+	appStateRecovery   map[appstate.WAPatchName]appStateRecoveryAttempt
+}
+
+type appStateRecoveryAttempt struct {
+	fullSyncAt        time.Time
+	recoveryRequestAt time.Time
+}
+
+const appStateRecoveryCooldown = 15 * time.Minute
+
+func (mycli *MyClient) reserveAppStateRecovery(name appstate.WAPatchName, recoveryRequest bool) bool {
+	mycli.appStateRecoveryMu.Lock()
+	defer mycli.appStateRecoveryMu.Unlock()
+
+	if mycli.appStateRecovery == nil {
+		mycli.appStateRecovery = make(map[appstate.WAPatchName]appStateRecoveryAttempt)
+	}
+
+	now := time.Now()
+	attempt := mycli.appStateRecovery[name]
+	lastAttempt := attempt.fullSyncAt
+	if recoveryRequest {
+		lastAttempt = attempt.recoveryRequestAt
+	}
+	if !lastAttempt.IsZero() && now.Sub(lastAttempt) < appStateRecoveryCooldown {
+		return false
+	}
+
+	if recoveryRequest {
+		attempt.recoveryRequestAt = now
+	} else {
+		attempt.fullSyncAt = now
+	}
+	mycli.appStateRecovery[name] = attempt
+	return true
+}
+
+func (mycli *MyClient) handleAppStateSyncError(evt *events.AppStateSyncError) {
+	if evt == nil || mycli.WAClient == nil {
+		return
+	}
+
+	// A failed incremental sync is retried once as a full sync. If the full
+	// snapshot also fails verification, ask the primary phone for a recovery
+	// snapshot. This follows the recovery sequence documented by whatsmeow and
+	// deliberately avoids the fatal recovery notification, which unlinks every
+	// companion device and would require a new login/QR.
+	recoveryRequest := evt.FullSync
+	if !mycli.reserveAppStateRecovery(evt.Name, recoveryRequest) {
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo(
+			"[%s] App-state recovery already attempted recently for %s (fullSync=%t)",
+			mycli.userID, evt.Name, evt.FullSync,
+		)
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if !recoveryRequest {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn(
+				"[%s] App-state incremental sync failed for %s; starting controlled full sync",
+				mycli.userID, evt.Name,
+			)
+			if err := mycli.WAClient.FetchAppState(ctx, evt.Name, true, false); err != nil {
+				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn(
+					"[%s] App-state full sync did not complete for %s; recovery request will be used if the full-sync error event is emitted: %v",
+					mycli.userID, evt.Name, err,
+				)
+			}
+			return
+		}
+
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn(
+			"[%s] App-state full sync failed for %s; requesting recovery snapshot from primary device",
+			mycli.userID, evt.Name,
+		)
+		if _, err := mycli.WAClient.SendPeerMessage(ctx, whatsmeow.BuildAppStateRecoveryRequest(evt.Name)); err != nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogError(
+				"[%s] Failed to send app-state recovery request for %s: %v",
+				mycli.userID, evt.Name, err,
+			)
+			return
+		}
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo(
+			"[%s] App-state recovery request sent for %s",
+			mycli.userID, evt.Name,
+		)
+	}()
 }
 
 func (mycli *MyClient) persistMessageAsync(message message_model.Message) {
@@ -905,7 +996,16 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		// so the socket survives a passkey ceremony). Forward + rotate them.
 		mycli.handleQRCodes(evt.Codes)
 		return
+	case *events.AppStateSyncError:
+		mycli.handleAppStateSyncError(evt)
+		return
 	case *events.AppStateSyncComplete:
+		if evt.Recovery {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo(
+				"[%s] App-state recovery completed for %s at version %d",
+				mycli.userID, evt.Name, evt.Version,
+			)
+		}
 		if len(mycli.WAClient.Store.PushName) > 0 && evt.Name == appstate.WAPatchCriticalBlock {
 			err := mycli.WAClient.SendPresence(context.Background(), types.PresenceUnavailable)
 			if err != nil {
