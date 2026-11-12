@@ -553,6 +553,17 @@ func (s *sendService) validateAndCheckUserExists(phone string, formatJid *bool, 
 	}
 
 	if !found {
+		if withNinthDigit := utils.BRNumberWithNinthDigit(phone); withNinthDigit != "" {
+			s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] User not found, trying Brazilian number with ninth digit", instance.Id)
+			remoteJIDRetry, foundRetry, errRetry := s.checkSingleUserExists(client, withNinthDigit, false, instance.Id)
+			if errRetry == nil && foundRetry {
+				remoteJID = remoteJIDRetry
+				found = foundRetry
+			}
+		}
+	}
+
+	if !found {
 		return types.NewJID("", types.DefaultUserServer), fmt.Errorf("number %s is not registered on WhatsApp", phone)
 	}
 

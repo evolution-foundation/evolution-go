@@ -187,6 +187,29 @@ func formatBRNumber(jid string) string {
 	return jid
 }
 
+// BRNumberWithNinthDigit returns the "+55DD9XXXXXXXX" form of a Brazilian
+// mobile number that lost its ninth digit in formatBRNumber, or "" when the
+// number is not one. Accounts registered after the ninth-digit rollout keep the
+// 9 in their JID, so the stripped form is reported as not on WhatsApp.
+func BRNumberWithNinthDigit(number string) string {
+	if strings.Contains(number, "@") && !strings.HasSuffix(number, "@s.whatsapp.net") {
+		return ""
+	}
+	digits := strings.TrimPrefix(strings.Split(number, "@")[0], "+")
+	if len(digits) != 12 || !strings.HasPrefix(digits, "55") {
+		return ""
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	if ddd, _ := strconv.Atoi(digits[2:4]); ddd < 11 || digits[4] < '7' {
+		return ""
+	}
+	return "+" + digits[:4] + "9" + digits[4:]
+}
+
 // ParseJID parses a number string into a WhatsApp JID with validation
 func ParseJID(arg string) (whatsmeow_types.JID, bool) {
 	if arg == "" {

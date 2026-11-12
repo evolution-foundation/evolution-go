@@ -384,3 +384,28 @@ func TestCanonicalJID(t *testing.T) {
 		})
 	}
 }
+
+func TestBRNumberWithNinthDigit(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "stripped BR mobile JID", input: "+553191004695@s.whatsapp.net", expected: "+5531991004695"},
+		{name: "stripped BR mobile without plus", input: "553187654321", expected: "+5531987654321"},
+		{name: "already has ninth digit", input: "+5531991004695@s.whatsapp.net", expected: ""},
+		{name: "BR landline", input: "+553132123456", expected: ""},
+		{name: "invalid DDD", input: "+550987654321", expected: ""},
+		{name: "non-BR number", input: "+15551234567", expected: ""},
+		{name: "LID", input: "123456789012@lid", expected: ""},
+		{name: "group", input: "553187654321@g.us", expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BRNumberWithNinthDigit(tt.input); got != tt.expected {
+				t.Errorf("For input %q, expected %q, but got %q", tt.input, tt.expected, got)
+			}
+		})
+	}
+}
