@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/gomessguii/logger"
+	// The binary's only registration of the "postgres" driver. Without it the
+	// build still passes and sql.Open("postgres") fails at boot.
+	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 

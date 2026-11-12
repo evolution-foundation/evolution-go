@@ -1,23 +1,47 @@
 # Evolution GO - Changelog
 
-## Não lançado
+## v0.7.3
 
-### 🔧 Correções
-- **whatsmeow atualizado para 2026-11-02** — a versão fixada na 0.7.2
-  (commit `b572e5bcb92b`, de 30/06/2026) ficou 125 dias atrás do upstream. O
-  WhatsApp subiu a versão mínima de cliente nesse intervalo e passou a recusar a
-  conexão com **405 client outdated**, impedindo pareamento e reconexão das
-  instâncias. Agora em `v0.0.0-20261102152715-54038813c47f`.
-- **Go 1.26** — o whatsmeow novo exige `go >= 1.26.0`; o `Dockerfile` passou a
-  usar `golang:1.26.10-alpine` no estágio de build.
-- **Ajustes de API do whatsmeow** — `UpdateBlocklist` e `GetBlocklist` agora
-  recebem um `dhash`; `SetStatusMessage` passou a receber `types.SetStatusInput`
-  (novo endpoint mex). O formato de resposta de bloqueio mudou de
-  `Modifications` para `Items` (com `LID`/`PN`/`Active`) — a documentação foi
-  atualizada, mas integrações que leem `Modifications` precisam de ajuste.
-- **Migração automática do banco de autenticação** — o schema do whatsmeow sobe
-  de v14 para v16 (`companion_meta_nonce`, `wasa_root_secret_id`). Roda sozinho
-  ao abrir o container; testado com banco SQLite v14 existente.
+**Docker:** `evoapicloud/evolution-go:0.7.3`
+
+### 🐛 Bug Fixes
+- **NATS com URL vazia.** A inicialização agora desativa o produtor quando `NATS_URL` não está configurada, evitando tentar conectar com uma URL vazia.
+- **`Client outdated (405)` on every connect.** Since 2026-11-02 WhatsApp
+  rejects the client version sent by 0.7.2 (`2.3000.1042386815`), so every
+  instance dropped and could not reconnect. whatsmeow moves to `54038813c47f`,
+  which sends `2.3000.1052556849`. Paired sessions reconnect without a new QR
+  code.
+- **Postgres connection leak on every connect and reconnect.** `StartClient`
+  called `sqlstore.New` on each run, so every connect, reconnect and client
+  restart opened a new connection pool that was never closed: one more
+  connection to `POSTGRES_AUTH_DB` per call. It now uses a single auth container
+  per process, built with `sqlstore.NewWithDB` on the pool `main.go` already
+  opens and caps (25 open / 5 idle). Against a real Postgres, 40 `StartClient`
+  calls grew the backend connections by 40 on 0.7.2 and by 1 on 0.7.3.
+- **Auth store upgrade bounded by a deadline.** The container upgrade runs
+  under a mutex; it now gives up after 60s instead of stalling every
+  `StartClient` behind a database that accepts TCP but never answers. A failed
+  creation is retried on the next call instead of being cached.
+- **`postgres` driver registered explicitly** in `pkg/config`, with a test, so
+  `sql.Open("postgres")` cannot start failing at boot after an import cleanup.
+
+### ⚠️ Breaking Changes
+- **Blocklist responses changed shape.** The `data` returned by
+  `POST /user/block`, `POST /user/unblock` and `GET /user/blocklist` follows
+  the new whatsmeow blocklist: `JIDs` is replaced by `Items`, a list of
+  `{LID, PN, Active}`, and `AddressingMode` is added. `DHash` stays. Blocking a
+  number that has no LID on WhatsApp now returns an error.
+
+### ⬆️ Upgrade notes
+- No configuration change. With SQLite (no `POSTGRES_AUTH_DB`), all instances
+  now share one auth database connection.
+- Building from source requires Go 1.26. The Docker image builds with
+  `golang:1.26.10-alpine`.
+- The whatsmeow store gets two new columns on startup (schema v16). The
+  migration is backwards compatible, so going back to the 0.7.2 image keeps
+  working.
+- A `CONNECTION LIMIT` set on the database role to contain the leak can stay;
+  this service now keeps its connections within its own pool.
 
 ## v0.7.2
 

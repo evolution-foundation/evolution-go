@@ -21,7 +21,6 @@ import (
 	"golang.org/x/image/webp"
 	"google.golang.org/protobuf/proto"
 
-	_ "github.com/lib/pq"
 	"github.com/patrickmn/go-cache"
 	"github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
@@ -474,8 +473,10 @@ func (w whatsmeowService) getAuthContainer() (*sqlstore.Container, error) {
 	if w.authStore == nil {
 		return nil, fmt.Errorf("auth store state is not initialized")
 	}
+
 	w.authStore.mu.Lock()
 	defer w.authStore.mu.Unlock()
+
 	if w.authStore.container != nil {
 		return w.authStore.container, nil
 	}
@@ -486,26 +487,37 @@ func (w whatsmeowService) getAuthContainer() (*sqlstore.Container, error) {
 	}
 
 	var container *sqlstore.Container
+	var ownDB *sql.DB
+
 	if w.config.PostgresAuthDB != "" {
+		// Reuse the pool owned by main; do not create or close another pool.
 		if w.authDB == nil {
 			return nil, fmt.Errorf("PostgresAuthDB is configured but authDB is nil")
 		}
-		// The process already owns a bounded authDB pool. NewWithDB does not
-		// open another pool; main closes authDB when the process shuts down.
 		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
-		if err := container.Upgrade(context.Background()); err != nil {
-			// Do not close container: that would also close main's authDB.
-			// A later start may retry after a transient database outage.
-			return nil, fmt.Errorf("failed to upgrade auth store: %w", err)
-		}
 	} else {
 		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-		var err error
-		container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
+
+		db, err := sql.Open("sqlite", dsn)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to open auth database: %w", err)
 		}
+
+		db.SetMaxOpenConns(1)
+		ownDB = db
+		container = sqlstore.NewWithDB(db, "sqlite", dbLog)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if err := container.Upgrade(ctx); err != nil {
+		if ownDB != nil {
+			_ = ownDB.Close()
+		}
+		return nil, fmt.Errorf("failed to upgrade auth store: %w", err)
+	}
+
 	w.authStore.container = container
 	return container, nil
 }
@@ -534,7 +546,7 @@ func (w whatsmeowService) startClient(cd *ClientData, generation *lifecycleGener
 
 	container, err := w.getAuthContainer()
 	if err != nil {
-		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to get auth container: %v", cd.Instance.Id, err)
 		return
 	}
 
