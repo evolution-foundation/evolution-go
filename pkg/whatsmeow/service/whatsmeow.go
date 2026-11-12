@@ -21,7 +21,6 @@ import (
 	"golang.org/x/image/webp"
 	"google.golang.org/protobuf/proto"
 
-	_ "github.com/lib/pq"
 	"github.com/patrickmn/go-cache"
 	"github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
@@ -301,6 +300,65 @@ func (w whatsmeowService) ForceUpdateJid(instanceId string, number string) error
 	return nil
 }
 
+// Shared by every StartClient: a container per call opens a pool that is never
+// closed. Only success is memoized, so a failed creation is retried next call.
+var (
+	sharedAuthContainer   *sqlstore.Container
+	sharedAuthContainerMu sync.Mutex
+)
+
+func (w whatsmeowService) getAuthContainer() (*sqlstore.Container, error) {
+	sharedAuthContainerMu.Lock()
+	defer sharedAuthContainerMu.Unlock()
+
+	if sharedAuthContainer != nil {
+		return sharedAuthContainer, nil
+	}
+
+	var dbLog waLog.Logger
+	if w.config.WaDebug != "" {
+		dbLog = waLog.Stdout("Database", w.config.WaDebug, true)
+	}
+
+	var container *sqlstore.Container
+	var ownDB *sql.DB
+
+	if w.config.PostgresAuthDB != "" {
+		// Reuse the pool main.go opened and capped; a second pool on the same
+		// DSN would raise the connection ceiling.
+		if w.authDB == nil {
+			return nil, fmt.Errorf("POSTGRES_AUTH_DB is set but the auth database pool was not initialized")
+		}
+		container = sqlstore.NewWithDB(w.authDB, "postgres", dbLog)
+	} else {
+		dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
+		db, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open auth database: %w", err)
+		}
+		// Process-wide cap shared by all instances. Fix the DSN before raising it:
+		// modernc ignores _journal_mode and _busy_timeout, so WAL is never enabled.
+		db.SetMaxOpenConns(1)
+		ownDB = db
+		container = sqlstore.NewWithDB(db, "sqlite", dbLog)
+	}
+
+	// Upgrade runs under the mutex: without a deadline, a server that accepts TCP
+	// but never answers would stall every StartClient behind it.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := container.Upgrade(ctx); err != nil {
+		// Close only what this call opened; the Postgres pool belongs to main.
+		if ownDB != nil {
+			_ = ownDB.Close()
+		}
+		return nil, fmt.Errorf("failed to upgrade auth database: %w", err)
+	}
+
+	sharedAuthContainer = container
+	return container, nil
+}
+
 func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Starting websocket connection to Whatsapp for user '%s'", cd.Instance.Id)
@@ -314,27 +372,9 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 		}
 	}
 
-	var container *sqlstore.Container
-
-	if w.config.WaDebug != "" {
-		dbLog := waLog.Stdout("Database", w.config.WaDebug, true)
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, dbLog)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, dbLog)
-		}
-	} else {
-		if w.config.PostgresAuthDB != "" {
-			container, err = sqlstore.New(context.Background(), "postgres", w.config.PostgresAuthDB, nil)
-		} else {
-			dsn := fmt.Sprintf("file:%s/dbdata/main.db?_pragma=foreign_keys(1)&_busy_timeout=5000&cache=shared&mode=rwc&_journal_mode=WAL", w.exPath)
-			container, err = sqlstore.New(context.Background(), "sqlite", dsn, nil)
-		}
-	}
-
+	container, err := w.getAuthContainer()
 	if err != nil {
-		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
+		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to get auth container: %v", cd.Instance.Id, err)
 		return
 	}
 
