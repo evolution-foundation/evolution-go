@@ -2,26 +2,26 @@ definitions:
   gin.H:
     additionalProperties: {}
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_call_service.RejectCallStruct:
+  github_com_evolution-foundation_evolution-go_pkg_call_service.RejectCallStruct:
     properties:
       callCreator:
         $ref: '#/definitions/types.JID'
       callId:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct:
+  github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct:
     properties:
       chat:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_chat_service.HistorySyncRequestStruct:
+  github_com_evolution-foundation_evolution-go_pkg_chat_service.HistorySyncRequestStruct:
     properties:
       count:
         type: integer
       messageInfo:
         $ref: '#/definitions/types.MessageInfo'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_community_service.AddParticipantStruct:
+  github_com_evolution-foundation_evolution-go_pkg_community_service.AddParticipantStruct:
     properties:
       communityJid:
         type: string
@@ -30,12 +30,12 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_community_service.CreateCommunityStruct:
+  github_com_evolution-foundation_evolution-go_pkg_community_service.CreateCommunityStruct:
     properties:
       communityName:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.AddParticipantStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.AddParticipantStruct:
     properties:
       action:
         $ref: '#/definitions/whatsmeow.ParticipantChange'
@@ -46,7 +46,7 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.CreateGroupStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.CreateGroupStruct:
     properties:
       groupName:
         type: string
@@ -55,50 +55,50 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.GetGroupInfoStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.GetGroupInfoStruct:
     properties:
       groupJid:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.GetGroupInviteLinkStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.GetGroupInviteLinkStruct:
     properties:
       groupJid:
         type: string
       reset:
         type: boolean
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.JoinGroupStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.JoinGroupStruct:
     properties:
       code:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.LeaveGroupStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.LeaveGroupStruct:
     properties:
       groupJid:
         $ref: '#/definitions/types.JID'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupDescriptionStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupDescriptionStruct:
     properties:
       description:
         type: string
       groupJid:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupNameStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupNameStruct:
     properties:
       groupJid:
         type: string
       name:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupPhotoStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupPhotoStruct:
     properties:
       groupJid:
         type: string
       image:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_group_service.UpdateGroupSettingsStruct:
+  github_com_evolution-foundation_evolution-go_pkg_group_service.UpdateGroupSettingsStruct:
     properties:
       action:
         description: announcement, not_announcement, locked, unlocked
@@ -106,7 +106,7 @@ definitions:
       groupJid:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_model.AdvancedSettings:
+  github_com_evolution-foundation_evolution-go_pkg_instance_model.AdvancedSettings:
     properties:
       alwaysOnline:
         type: boolean
@@ -121,7 +121,7 @@ definitions:
       rejectCall:
         type: boolean
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.ConnectStruct:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.ConnectStruct:
     properties:
       immediate:
         type: boolean
@@ -140,25 +140,25 @@ definitions:
       websocketEnable:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.CreateStruct:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.CreateStruct:
     properties:
       advancedSettings:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_model.AdvancedSettings'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_model.AdvancedSettings'
       instanceId:
         type: string
       name:
         type: string
       proxy:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.ProxyConfig'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.ProxyConfig'
       token:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.ForceReconnectStruct:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.ForceReconnectStruct:
     properties:
       number:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.PairStruct:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.PairStruct:
     properties:
       phone:
         type: string
@@ -167,7 +167,7 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.ProxyConfig:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.ProxyConfig:
     properties:
       host:
         type: string
@@ -180,7 +180,7 @@ definitions:
       username:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_instance_service.SetProxyStruct:
+  github_com_evolution-foundation_evolution-go_pkg_instance_service.SetProxyStruct:
     properties:
       host:
         type: string
@@ -196,14 +196,14 @@ definitions:
     - host
     - port
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_label_service.ChatLabelStruct:
+  github_com_evolution-foundation_evolution-go_pkg_label_service.ChatLabelStruct:
     properties:
       jid:
         type: string
       labelId:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_label_service.EditLabelStruct:
+  github_com_evolution-foundation_evolution-go_pkg_label_service.EditLabelStruct:
     properties:
       color:
         type: integer
@@ -214,7 +214,7 @@ definitions:
       name:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_label_service.MessageLabelStruct:
+  github_com_evolution-foundation_evolution-go_pkg_label_service.MessageLabelStruct:
     properties:
       jid:
         type: string
@@ -223,7 +223,7 @@ definitions:
       messageId:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.ChatPresenceStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.ChatPresenceStruct:
     properties:
       delay:
         description: |-
@@ -238,12 +238,12 @@ definitions:
       state:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.DownloadMediaStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.DownloadMediaStruct:
     properties:
       message:
         $ref: '#/definitions/waE2E.Message'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.EditMessageStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.EditMessageStruct:
     properties:
       chat:
         type: string
@@ -252,7 +252,7 @@ definitions:
       messageId:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.MarkPlayedStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.MarkPlayedStruct:
     properties:
       id:
         items:
@@ -261,7 +261,7 @@ definitions:
       number:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.MarkReadStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.MarkReadStruct:
     properties:
       id:
         items:
@@ -270,19 +270,19 @@ definitions:
       number:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.MessageStatusStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.MessageStatusStruct:
     properties:
       id:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.MessageStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.MessageStruct:
     properties:
       chat:
         type: string
       messageId:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_message_service.ReactStruct:
+  github_com_evolution-foundation_evolution-go_pkg_message_service.ReactStruct:
     properties:
       fromMe:
         type: boolean
@@ -295,19 +295,19 @@ definitions:
       reaction:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.CreateNewsletterStruct:
+  github_com_evolution-foundation_evolution-go_pkg_newsletter_service.CreateNewsletterStruct:
     properties:
       description:
         type: string
       name:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterInviteStruct:
+  github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterInviteStruct:
     properties:
       key:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterMessagesStruct:
+  github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterMessagesStruct:
     properties:
       before_id:
         type: integer
@@ -316,12 +316,12 @@ definitions:
       jid:
         $ref: '#/definitions/types.JID'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterStruct:
+  github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterStruct:
     properties:
       jid:
         $ref: '#/definitions/types.JID'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_poll_model.PollResults:
+  github_com_evolution-foundation_evolution-go_pkg_poll_model.PollResults:
     properties:
       optionCounts:
         additionalProperties:
@@ -336,14 +336,14 @@ definitions:
         type: integer
       voters:
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_poll_model.VoterInfo'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_poll_model.VoterInfo'
         type: array
       votes:
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_poll_model.PollVote'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_poll_model.PollVote'
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_poll_model.PollVote:
+  github_com_evolution-foundation_evolution-go_pkg_poll_model.PollVote:
     properties:
       companyId:
         type: string
@@ -373,7 +373,7 @@ definitions:
       voterPhone:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_poll_model.VoterInfo:
+  github_com_evolution-foundation_evolution-go_pkg_poll_model.VoterInfo:
     properties:
       jid:
         type: string
@@ -388,7 +388,7 @@ definitions:
       votedAt:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Button:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Button:
     properties:
       copyCode:
         description: Code placed in the clipboard when type=copy.
@@ -445,12 +445,12 @@ definitions:
         example: https://evolutionapi.com
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ButtonStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ButtonStruct:
     properties:
       buttons:
         description: Buttons array. See combination rules on the parent type description.
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Button'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Button'
         type: array
       delay:
         description: Typing delay (milliseconds) applied before sending the message.
@@ -485,7 +485,7 @@ definitions:
         type: string
       quoted:
         allOf:
-        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        - $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
         description: Quoted (reply-to) context.
       title:
         description: Header title (required).
@@ -495,7 +495,7 @@ definitions:
         description: Optional video URL used as header for reply-only buttons.
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselButtonStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselButtonStruct:
     properties:
       copyCode:
         description: Code placed in the clipboard when type=COPY.
@@ -525,14 +525,14 @@ definitions:
         example: REPLY
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardBodyStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardBodyStruct:
     properties:
       text:
         description: Main text of the card.
         example: Card 1 - Oferta especial
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardHeaderStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardHeaderStruct:
     properties:
       imageUrl:
         description: Public URL to an image. Downloaded, uploaded to WhatsApp servers
@@ -551,17 +551,17 @@ definitions:
         description: Public URL to a video. Used only when `imageUrl` is empty.
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardStruct:
     properties:
       body:
         allOf:
-        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardBodyStruct'
+        - $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardBodyStruct'
         description: Card body text (required).
       buttons:
         description: Buttons shown on the card. See CarouselButtonStruct for combination
           rules.
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselButtonStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselButtonStruct'
         type: array
       footer:
         description: Optional footer rendered under the body.
@@ -569,10 +569,10 @@ definitions:
         type: string
       header:
         allOf:
-        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardHeaderStruct'
+        - $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardHeaderStruct'
         description: Card header (media + title/subtitle).
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselStruct:
     properties:
       body:
         description: Optional message body shown above the cards.
@@ -581,7 +581,7 @@ definitions:
       cards:
         description: Cards displayed in order. At least one card is required.
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselCardStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselCardStruct'
         type: array
       delay:
         description: Typing delay (milliseconds) applied before sending the message.
@@ -601,10 +601,10 @@ definitions:
         type: string
       quoted:
         allOf:
-        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        - $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
         description: Quoted (reply-to) context.
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ContactStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ContactStruct:
     properties:
       delay:
         type: integer
@@ -621,11 +621,11 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
       vcard:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_utils.VCardStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_utils.VCardStruct'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.LinkStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.LinkStruct:
     properties:
       delay:
         type: integer
@@ -646,7 +646,7 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
       text:
         type: string
       title:
@@ -654,7 +654,7 @@ definitions:
       url:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ListStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ListStruct:
     properties:
       buttonText:
         description: Label of the button that opens the list. Defaults to "Ver Menu"
@@ -691,19 +691,19 @@ definitions:
         type: string
       quoted:
         allOf:
-        - $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        - $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
         description: Quoted (reply-to) context.
       sections:
         description: Sections with rows. At least one section with one row is required.
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Section'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Section'
         type: array
       title:
         description: Header title (required).
         example: Nossos planos
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.LocationStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.LocationStruct:
     properties:
       address:
         type: string
@@ -728,9 +728,9 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.MediaStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.MediaStruct:
     properties:
       caption:
         type: string
@@ -753,13 +753,13 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
       type:
         type: string
       url:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.PollStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.PollStruct:
     properties:
       delay:
         type: integer
@@ -784,16 +784,16 @@ definitions:
       question:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct:
     properties:
       messageId:
         type: string
       participant:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Row:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Row:
     properties:
       description:
         description: Optional secondary line below the title.
@@ -809,26 +809,26 @@ definitions:
         example: Plano Basico
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Section:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Section:
     properties:
       rows:
         description: Rows inside this section.
         items:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.Row'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.Row'
         type: array
       title:
         description: Section heading (optional; rendered as a group separator).
         example: Planos
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.StatusTextStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.StatusTextStruct:
     properties:
       id:
         type: string
       text:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.StickerStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.StickerStruct:
     properties:
       delay:
         type: integer
@@ -845,11 +845,11 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
       sticker:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.TextStruct:
+  github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.TextStruct:
     properties:
       delay:
         type: integer
@@ -868,16 +868,16 @@ definitions:
       number:
         type: string
       quoted:
-        $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.QuotedStruct'
+        $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.QuotedStruct'
       text:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_user_service.BlockStruct:
+  github_com_evolution-foundation_evolution-go_pkg_user_service.BlockStruct:
     properties:
       number:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_user_service.CheckUserStruct:
+  github_com_evolution-foundation_evolution-go_pkg_user_service.CheckUserStruct:
     properties:
       formatJid:
         type: boolean
@@ -886,14 +886,14 @@ definitions:
           type: string
         type: array
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_user_service.GetAvatarStruct:
+  github_com_evolution-foundation_evolution-go_pkg_user_service.GetAvatarStruct:
     properties:
       number:
         type: string
       preview:
         type: boolean
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_user_service.PrivacyStruct:
+  github_com_evolution-foundation_evolution-go_pkg_user_service.PrivacyStruct:
     properties:
       callAdd:
         $ref: '#/definitions/types.PrivacySetting'
@@ -910,12 +910,12 @@ definitions:
       status:
         $ref: '#/definitions/types.PrivacySetting'
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_user_service.SetProfilePictureStruct:
+  github_com_evolution-foundation_evolution-go_pkg_user_service.SetProfilePictureStruct:
     properties:
       image:
         type: string
     type: object
-  github_com_EvolutionAPI_evolution-go_pkg_utils.VCardStruct:
+  github_com_evolution-foundation_evolution-go_pkg_utils.VCardStruct:
     properties:
       fullName:
         type: string
@@ -969,13 +969,6 @@ definitions:
     type: string
     x-enum-comments:
       EditAttributeAdminEdit: only used in newsletters
-    x-enum-descriptions:
-    - ""
-    - ""
-    - ""
-    - only used in newsletters
-    - ""
-    - ""
     x-enum-varnames:
     - EditAttributeEmpty
     - EditAttributeMessageEdit
@@ -986,13 +979,10 @@ definitions:
   types.JID:
     properties:
       device:
-        format: int32
         type: integer
       integrator:
-        format: int32
         type: integer
       rawAgent:
-        format: int32
         type: integer
       server:
         type: string
@@ -1197,7 +1187,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - AISubscriptionRequestType_UNSPECIFIED
@@ -1229,7 +1218,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - AIThreadInfo_AIThreadClientInfo_UNKNOWN
@@ -1254,7 +1242,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotAgeCollectionMetadata_O18_BINARY
@@ -1344,7 +1331,6 @@ definitions:
     - 63
     - 64
     - 65
-    format: int32
     type: integer
     x-enum-varnames:
     - BotCapabilityMetadata_UNKNOWN
@@ -1431,7 +1417,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotDocumentMessageMetadata_TEXT_EXTRACTION
@@ -1470,7 +1455,6 @@ definitions:
     - 12
     - 13
     - 14
-    format: int32
     type: integer
     x-enum-varnames:
     - BotFeedbackMessage_BOT_FEEDBACK_POSITIVE
@@ -1492,7 +1476,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotFeedbackMessage_NONE
@@ -1600,7 +1583,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - BotImagineMetadata_UNKNOWN
@@ -1623,7 +1605,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotInfrastructureDiagnostics_AAPI
@@ -1636,7 +1617,6 @@ definitions:
   waAICommon.BotLinkedAccount_BotLinkedAccountType:
     enum:
     - 0
-    format: int32
     type: integer
     x-enum-varnames:
     - BotLinkedAccount_BOT_LINKED_ACCOUNT_TYPE_1P
@@ -1675,7 +1655,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotMediaMetadata_CENTER
@@ -1716,7 +1695,6 @@ definitions:
   waAICommon.BotMessageOrigin_BotMessageOriginType:
     enum:
     - 0
-    format: int32
     type: integer
     x-enum-varnames:
     - BotMessageOrigin_BOT_MESSAGE_ORIGIN_TYPE_AI_INITIATED
@@ -1875,7 +1853,6 @@ definitions:
     - 54
     - 55
     - 56
-    format: int32
     type: integer
     x-enum-varnames:
     - BotMetricsEntryPoint_UNDEFINED_ENTRY_POINT
@@ -1942,7 +1919,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - BotMetricsThreadEntryPoint_AI_TAB_THREAD
@@ -1965,7 +1941,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotModeSelectionMetadata_DEFAULT_MODE
@@ -1984,7 +1959,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - BotModelMetadata_UNKNOWN_TYPE
@@ -1995,7 +1969,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - BotModelMetadata_UNKNOWN_STATUS
@@ -2033,7 +2006,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - BotPluginMetadata_UNKNOWN_PLUGIN
@@ -2045,7 +2017,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotPluginMetadata_UNKNOWN
@@ -2110,7 +2081,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotProgressIndicatorMetadata_BotPlanningStepMetadata_BotPlanningSearchSourcesMetadata_UNKNOWN
@@ -2134,7 +2104,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotProgressIndicatorMetadata_BotPlanningStepMetadata_UNKNOWN_PROVIDER
@@ -2147,7 +2116,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotProgressIndicatorMetadata_BotPlanningStepMetadata_UNKNOWN
@@ -2166,7 +2134,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - BotPromotionMessageMetadata_UNKNOWN_TYPE
@@ -2211,7 +2178,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - BotQuotaMetadata_BotFeatureQuotaMetadata_UNKNOWN_FEATURE
@@ -2235,7 +2201,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - BotReminderMetadata_NOTIFY
@@ -2249,7 +2214,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - BotReminderMetadata_ONCE
@@ -2304,7 +2268,6 @@ definitions:
     - 5
     - 6
     - 7
-    format: int32
     type: integer
     x-enum-varnames:
     - BotSessionSource_NONE
@@ -2327,7 +2290,6 @@ definitions:
       certificateChain:
         items:
           items:
-            format: int32
             type: integer
           type: array
         type: array
@@ -2346,7 +2308,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - BotSignatureVerificationUseCaseProof_UNSPECIFIED
@@ -2384,7 +2345,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - BotSourcesMetadata_BotSourceItem_UNKNOWN
@@ -2533,7 +2493,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - SessionTransparencyType_UNKNOWN_TYPE
@@ -2562,7 +2521,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseCodeMetadata_AI_RICH_RESPONSE_CODE_HIGHLIGHT_DEFAULT
@@ -2589,7 +2547,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseContentItemsMetadata_DEFAULT
@@ -2610,7 +2567,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseDynamicMetadata_AI_RICH_RESPONSE_DYNAMIC_METADATA_TYPE_UNKNOWN
@@ -2650,7 +2606,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseInlineImageMetadata_AI_RICH_RESPONSE_IMAGE_LAYOUT_LEADING_ALIGNED
@@ -2720,7 +2675,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseMessageType_AI_RICH_RESPONSE_TYPE_UNKNOWN
@@ -2760,7 +2714,6 @@ definitions:
     - 7
     - 8
     - 9
-    format: int32
     type: integer
     x-enum-varnames:
     - AIRichResponseSubMessageType_AI_RICH_RESPONSE_UNKNOWN
@@ -2795,7 +2748,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ADVEncryptionType_E2EE
@@ -2817,7 +2769,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - LimitSharing_UNKNOWN
@@ -3048,7 +2999,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - BCallMessage_UNKNOWN
@@ -3099,7 +3049,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ButtonsMessage_Button_UNKNOWN
@@ -3114,7 +3063,6 @@ definitions:
     - 4
     - 5
     - 6
-    format: int32
     type: integer
     x-enum-varnames:
     - ButtonsMessage_UNKNOWN
@@ -3139,7 +3087,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ButtonsResponseMessage_UNKNOWN
@@ -3200,7 +3147,6 @@ definitions:
     - 5
     - 6
     - 7
-    format: int32
     type: integer
     x-enum-varnames:
     - CallLogMessage_CONNECTED
@@ -3223,7 +3169,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - CallLogMessage_REGULAR
@@ -3273,7 +3218,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - CloudAPIThreadControlNotification_UNKNOWN
@@ -3313,7 +3257,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ConditionalRevealMessage_UNKNOWN
@@ -3497,7 +3440,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_AdReplyInfo_NONE
@@ -3528,7 +3470,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_BusinessInteractionPills_ENTRY_POINT_UNKNOWN
@@ -3559,7 +3500,6 @@ definitions:
     - 10
     - 11
     - 12
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_BusinessInteractionPills_UNKNOWN
@@ -3585,7 +3525,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_CROSS_APP_SOURCE_UNKNOWN
@@ -3690,7 +3629,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_ExternalAdReplyInfo_CTWA
@@ -3700,7 +3638,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_ExternalAdReplyInfo_NONE
@@ -3727,7 +3664,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_UNKNOWN
@@ -3756,7 +3692,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_ForwardedNewsletterMessageInfo_UPDATE
@@ -3773,7 +3708,6 @@ definitions:
     - 6
     - 7
     - 8
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_NOT_PAIRED_MEDIA
@@ -3803,7 +3737,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_EXPLICIT
@@ -3815,7 +3748,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_NONE
@@ -3836,7 +3768,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_StatusAudienceMetadata_UNKNOWN
@@ -3849,7 +3780,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - ContextInfo_IMAGE
@@ -3923,7 +3853,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - DisappearingMode_CHANGED_IN_CHAT
@@ -3938,7 +3867,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - DisappearingMode_UNKNOWN
@@ -4226,7 +4154,6 @@ definitions:
     - 8
     - 9
     - 10
-    format: int32
     type: integer
     x-enum-varnames:
     - ExtendedTextMessage_SYSTEM
@@ -4243,7 +4170,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - ExtendedTextMessage_DEFAULT
@@ -4258,7 +4184,6 @@ definitions:
     - 5
     - 6
     - 7
-    format: int32
     type: integer
     x-enum-varnames:
     - ExtendedTextMessage_NONE
@@ -4315,7 +4240,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - GroupInviteMessage_DEFAULT
@@ -4436,7 +4360,6 @@ definitions:
     - 6
     - 7
     - 8
-    format: int32
     type: integer
     x-enum-varnames:
     - HistorySyncType_INITIAL_BOOTSTRAP
@@ -4550,7 +4473,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - ImageMessage_USER_IMAGE
@@ -4569,7 +4491,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - InsightDeliveryState_SENT
@@ -4597,7 +4518,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - InteractiveAnnotation_RASTERIZED_LINK_PREVIEW
@@ -4678,7 +4598,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - InteractiveResponseMessage_Body_DEFAULT
@@ -4718,7 +4637,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - InvoiceMessage_IMAGE
@@ -4737,7 +4655,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - KeepType_UNKNOWN_KEEP_TYPE
@@ -4779,7 +4696,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - LinkPreviewMetadata_NONE
@@ -4814,7 +4730,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ListMessage_UNKNOWN
@@ -4889,7 +4804,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ListResponseMessage_UNKNOWN
@@ -4990,7 +4904,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - MediaKeyDomain_MEDIA_KEY_DOMAIN_UNKNOWN
@@ -5263,7 +5176,6 @@ definitions:
     - 18
     - 19
     - 20
-    format: int32
     type: integer
     x-enum-varnames:
     - MessageAssociation_UNKNOWN
@@ -5338,7 +5250,6 @@ definitions:
     enum:
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - MessageContextInfo_STATIC
@@ -5473,7 +5384,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - OrderMessage_INQUIRY
@@ -5482,7 +5392,6 @@ definitions:
   waE2E.OrderMessage_OrderSurface:
     enum:
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - OrderMessage_CATALOG
@@ -5532,7 +5441,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentBackground_UNKNOWN
@@ -5561,7 +5469,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentInviteMessage_DEFAULT
@@ -5572,7 +5479,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentInviteMessage_UNKNOWN
@@ -5602,7 +5508,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentLinkMetadata_PaymentLinkHeader_LINK_PREVIEW
@@ -5640,7 +5545,6 @@ definitions:
     - 2
     - 3
     - 4
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentReminderMessage_REMINDER_FREQUENCY_UNKNOWN
@@ -5656,7 +5560,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - PaymentReminderMessage_REMINDER_STATUS_UNKNOWN
@@ -5739,7 +5642,6 @@ definitions:
     enum:
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - PeerDataOperationRequestMessage_GalaxyFlowAction_NOTIFY_LAUNCH
@@ -5912,7 +5814,6 @@ definitions:
     - 5
     - 6
     - 7
-    format: int32
     type: integer
     x-enum-varnames:
     - PeerDataOperationRequestResponseMessage_PeerDataOperationResult_REQUEST_SUCCESS
@@ -5944,7 +5845,6 @@ definitions:
     - 4
     - 5
     - 6
-    format: int32
     type: integer
     x-enum-varnames:
     - PeerDataOperationRequestResponseMessage_PeerDataOperationResult_GENERATION_ERROR
@@ -6045,7 +5945,6 @@ definitions:
     - 11
     - 12
     - 13
-    format: int32
     type: integer
     x-enum-varnames:
     - PeerDataOperationRequestType_UPLOAD_STICKER
@@ -6076,7 +5975,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - PinInChatMessage_UNKNOWN_TYPE
@@ -6090,7 +5988,6 @@ definitions:
   waE2E.PlaceholderMessage_PlaceholderType:
     enum:
     - 0
-    format: int32
     type: integer
     x-enum-varnames:
     - PlaceholderMessage_MASK_LINKED_DEVICES
@@ -6119,7 +6016,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - PollContentType_UNKNOWN_POLL_CONTENT_TYPE
@@ -6196,7 +6092,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - PollType_POLL
@@ -6250,7 +6145,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - ProcessedVideo_UNDEFINED
@@ -6401,7 +6295,6 @@ definitions:
     - 32
     - 34
     - 35
-    format: int32
     type: integer
     x-enum-varnames:
     - ProtocolMessage_REVOKE
@@ -6487,7 +6380,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - RequestWelcomeMessageMetadata_EMPTY
@@ -6496,7 +6388,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - RequestWelcomeMessageMetadata_CHAT_OPEN
@@ -6520,7 +6411,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ScheduledCallCreationMessage_UNKNOWN
@@ -6537,7 +6427,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - ScheduledCallEditMessage_UNKNOWN
@@ -6567,7 +6456,6 @@ definitions:
     - 3
     - 4
     - 5
-    format: int32
     type: integer
     x-enum-varnames:
     - SecretEncryptedMessage_UNKNOWN
@@ -6628,7 +6516,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - SplitPaymentParticipant_PENDING
@@ -6648,7 +6535,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - StatusNotificationMessage_UNKNOWN
@@ -6678,7 +6564,6 @@ definitions:
   waE2E.StatusQuotedMessage_StatusQuotedMessageType:
     enum:
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - StatusQuotedMessage_QUESTION_ANSWER
@@ -6695,7 +6580,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - StatusStickerInteractionMessage_UNKNOWN
@@ -6840,7 +6724,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - StickerPackMessage_FIRST_PARTY
@@ -6910,7 +6793,6 @@ definitions:
     - 0
     - 1
     - 2
-    format: int32
     type: integer
     x-enum-varnames:
     - ThreadID_UNKNOWN
@@ -7039,7 +6921,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - VideoMessage_NONE
@@ -7050,7 +6931,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - VideoMessage_USER_VIDEO
@@ -7059,7 +6939,6 @@ definitions:
     enum:
     - 0
     - 1
-    format: int32
     type: integer
     x-enum-varnames:
     - WebLinkRenderConfig_WEBVIEW
@@ -7070,7 +6949,6 @@ definitions:
     - 1
     - 2
     - 3
-    format: int32
     type: integer
     x-enum-varnames:
     - MediaRetryNotification_GENERAL_ERROR
@@ -7099,7 +6977,6 @@ definitions:
     - 8
     - 9
     - 10
-    format: int32
     type: integer
     x-enum-varnames:
     - StatusAttribution_UNKNOWN
@@ -7181,7 +7058,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_call_service.RejectCallStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_call_service.RejectCallStruct'
       produces:
       - application/json
       responses:
@@ -7207,7 +7084,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7237,7 +7114,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.HistorySyncRequestStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.HistorySyncRequestStruct'
       produces:
       - application/json
       responses:
@@ -7267,7 +7144,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7297,7 +7174,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7327,7 +7204,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7357,7 +7234,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7387,7 +7264,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_chat_service.BodyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_chat_service.BodyStruct'
       produces:
       - application/json
       responses:
@@ -7417,7 +7294,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_community_service.AddParticipantStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_community_service.AddParticipantStruct'
       produces:
       - application/json
       responses:
@@ -7447,7 +7324,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_community_service.CreateCommunityStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_community_service.CreateCommunityStruct'
       produces:
       - application/json
       responses:
@@ -7477,7 +7354,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_community_service.AddParticipantStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_community_service.AddParticipantStruct'
       produces:
       - application/json
       responses:
@@ -7507,7 +7384,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.CreateGroupStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.CreateGroupStruct'
       produces:
       - application/json
       responses:
@@ -7537,7 +7414,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupDescriptionStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupDescriptionStruct'
       produces:
       - application/json
       responses:
@@ -7567,7 +7444,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.GetGroupInfoStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.GetGroupInfoStruct'
       produces:
       - application/json
       responses:
@@ -7597,7 +7474,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.GetGroupInviteLinkStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.GetGroupInviteLinkStruct'
       produces:
       - application/json
       responses:
@@ -7627,7 +7504,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.JoinGroupStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.JoinGroupStruct'
       produces:
       - application/json
       responses:
@@ -7657,7 +7534,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.LeaveGroupStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.LeaveGroupStruct'
       produces:
       - application/json
       responses:
@@ -7725,7 +7602,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupNameStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupNameStruct'
       produces:
       - application/json
       responses:
@@ -7755,7 +7632,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.AddParticipantStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.AddParticipantStruct'
       produces:
       - application/json
       responses:
@@ -7785,7 +7662,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.SetGroupPhotoStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.SetGroupPhotoStruct'
       produces:
       - application/json
       responses:
@@ -7816,7 +7693,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_group_service.UpdateGroupSettingsStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_group_service.UpdateGroupSettingsStruct'
       produces:
       - application/json
       responses:
@@ -7837,7 +7714,8 @@ paths:
       - Group
   /instance/{instanceId}/advanced-settings:
     get:
-      description: Get advanced settings for a specific instance
+      description: Get advanced settings for the instance authenticated by apikey;
+        the path ID must match that instance.
       parameters:
       - description: Instance ID
         in: path
@@ -7850,9 +7728,17 @@ paths:
         "200":
           description: Advanced settings retrieved successfully
           schema:
-            $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_model.AdvancedSettings'
+            $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_model.AdvancedSettings'
         "400":
           description: Invalid instance ID
+          schema:
+            $ref: '#/definitions/gin.H'
+        "401":
+          description: Not authorized
+          schema:
+            $ref: '#/definitions/gin.H'
+        "403":
+          description: Instance ID does not match authenticated instance
           schema:
             $ref: '#/definitions/gin.H'
         "404":
@@ -7869,7 +7755,9 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update advanced settings for a specific instance
+      description: Partially update the authenticated instance. Omitted or null fields
+        are unchanged; false disables flags and an empty msgRejectCall clears the
+        message. The path ID must match the instance authenticated by apikey.
       parameters:
       - description: Instance ID
         in: path
@@ -7881,7 +7769,7 @@ paths:
         name: settings
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_model.AdvancedSettings'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_model.AdvancedSettings'
       produces:
       - application/json
       responses:
@@ -7891,6 +7779,14 @@ paths:
             $ref: '#/definitions/gin.H'
         "400":
           description: Invalid request data
+          schema:
+            $ref: '#/definitions/gin.H'
+        "401":
+          description: Not authorized
+          schema:
+            $ref: '#/definitions/gin.H'
+        "403":
+          description: Instance ID does not match authenticated instance
           schema:
             $ref: '#/definitions/gin.H'
         "404":
@@ -7927,14 +7823,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: Connect to instance with the provided data
+      description: Connect with partial settings. Empty subscribe and empty producer
+        strings preserve existing values; MESSAGE is the initial event default. A
+        non-empty subscribe must contain a valid event or ALL.
       parameters:
       - description: Instance data
         in: body
         name: instance
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.ConnectStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.ConnectStruct'
       produces:
       - application/json
       responses:
@@ -7944,6 +7842,10 @@ paths:
             $ref: '#/definitions/gin.H'
         "400":
           description: Error on validation
+          schema:
+            $ref: '#/definitions/gin.H'
+        "404":
+          description: Instance not found
           schema:
             $ref: '#/definitions/gin.H'
         "500":
@@ -7965,7 +7867,7 @@ paths:
         name: instance
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.CreateStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.CreateStruct'
       produces:
       - application/json
       responses:
@@ -8048,7 +7950,7 @@ paths:
         name: instance
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.ForceReconnectStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.ForceReconnectStruct'
       produces:
       - application/json
       responses:
@@ -8170,7 +8072,7 @@ paths:
         name: instance
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.PairStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.PairStruct'
       produces:
       - application/json
       responses:
@@ -8233,7 +8135,7 @@ paths:
         name: proxy
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_instance_service.SetProxyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_instance_service.SetProxyStruct'
       produces:
       - application/json
       responses:
@@ -8320,7 +8222,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_label_service.ChatLabelStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_label_service.ChatLabelStruct'
       produces:
       - application/json
       responses:
@@ -8350,7 +8252,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_label_service.EditLabelStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_label_service.EditLabelStruct'
       produces:
       - application/json
       responses:
@@ -8399,7 +8301,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_label_service.MessageLabelStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_label_service.MessageLabelStruct'
       produces:
       - application/json
       responses:
@@ -8418,64 +8320,6 @@ paths:
       summary: Add label to message
       tags:
       - Label
-  /license/activate:
-    get:
-      description: Exchanges an authorization code (from the registration callback)
-        for an api_key and persists it. Provide the code via the query string.
-      parameters:
-      - description: Authorization code from the registration callback
-        in: query
-        name: code
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Activation result
-          schema:
-            $ref: '#/definitions/gin.H'
-        "400":
-          description: Missing code parameter
-          schema:
-            $ref: '#/definitions/gin.H'
-      summary: Activate license
-      tags:
-      - License
-  /license/register:
-    get:
-      description: Checks the GLOBAL_API_KEY with the licensing server. If not yet
-        registered, initiates registration and returns a register_url. Accepts an
-        optional redirect_uri for the post-registration redirect.
-      parameters:
-      - description: Post-registration redirect URI
-        in: query
-        name: redirect_uri
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Registration state (status/message or register_url)
-          schema:
-            $ref: '#/definitions/gin.H'
-      summary: Register / get registration URL
-      tags:
-      - License
-  /license/status:
-    get:
-      description: Returns whether the instance license is active, along with the
-        instance id and a masked api key.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: License status ({status, instance_id, api_key?})
-          schema:
-            $ref: '#/definitions/gin.H'
-      summary: Get license status
-      tags:
-      - License
   /message/delete:
     post:
       consumes:
@@ -8487,7 +8331,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.MessageStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.MessageStruct'
       produces:
       - application/json
       responses:
@@ -8518,7 +8362,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.DownloadMediaStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.DownloadMediaStruct'
       produces:
       - application/json
       responses:
@@ -8548,7 +8392,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.EditMessageStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.EditMessageStruct'
       produces:
       - application/json
       responses:
@@ -8578,7 +8422,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.MarkPlayedStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.MarkPlayedStruct'
       produces:
       - application/json
       responses:
@@ -8608,7 +8452,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.MarkReadStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.MarkReadStruct'
       produces:
       - application/json
       responses:
@@ -8638,7 +8482,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.ChatPresenceStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.ChatPresenceStruct'
       produces:
       - application/json
       responses:
@@ -8669,7 +8513,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.ReactStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.ReactStruct'
       produces:
       - application/json
       responses:
@@ -8699,7 +8543,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_message_service.MessageStatusStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_message_service.MessageStatusStruct'
       produces:
       - application/json
       responses:
@@ -8729,7 +8573,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.CreateNewsletterStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_newsletter_service.CreateNewsletterStruct'
       produces:
       - application/json
       responses:
@@ -8759,7 +8603,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterStruct'
       produces:
       - application/json
       responses:
@@ -8789,7 +8633,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterInviteStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterInviteStruct'
       produces:
       - application/json
       responses:
@@ -8838,7 +8682,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterMessagesStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterMessagesStruct'
       produces:
       - application/json
       responses:
@@ -8868,7 +8712,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_newsletter_service.GetNewsletterStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_newsletter_service.GetNewsletterStruct'
       produces:
       - application/json
       responses:
@@ -9019,7 +8863,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_poll_model.PollResults'
+            $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_poll_model.PollResults'
         "400":
           description: Bad Request
           schema:
@@ -9058,7 +8902,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ButtonStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ButtonStruct'
       produces:
       - application/json
       responses:
@@ -9104,7 +8948,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.CarouselStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.CarouselStruct'
       produces:
       - application/json
       responses:
@@ -9134,7 +8978,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ContactStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ContactStruct'
       produces:
       - application/json
       responses:
@@ -9164,7 +9008,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.LinkStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.LinkStruct'
       produces:
       - application/json
       responses:
@@ -9201,7 +9045,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ListStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.ListStruct'
       produces:
       - application/json
       responses:
@@ -9231,7 +9075,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.LocationStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.LocationStruct'
       produces:
       - application/json
       responses:
@@ -9261,7 +9105,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.MediaStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.MediaStruct'
       produces:
       - application/json
       responses:
@@ -9291,7 +9135,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.PollStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.PollStruct'
       produces:
       - application/json
       responses:
@@ -9368,7 +9212,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.StatusTextStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.StatusTextStruct'
       produces:
       - application/json
       responses:
@@ -9398,7 +9242,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.StickerStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.StickerStruct'
       produces:
       - application/json
       responses:
@@ -9428,7 +9272,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.TextStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_sendMessage_service.TextStruct'
       produces:
       - application/json
       responses:
@@ -9458,7 +9302,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_label_service.ChatLabelStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_label_service.ChatLabelStruct'
       produces:
       - application/json
       responses:
@@ -9488,7 +9332,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_label_service.MessageLabelStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_label_service.MessageLabelStruct'
       produces:
       - application/json
       responses:
@@ -9518,7 +9362,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.GetAvatarStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.GetAvatarStruct'
       produces:
       - application/json
       responses:
@@ -9548,7 +9392,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.BlockStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.BlockStruct'
       produces:
       - application/json
       responses:
@@ -9597,7 +9441,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.CheckUserStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.CheckUserStruct'
       produces:
       - application/json
       responses:
@@ -9646,7 +9490,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.CheckUserStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.CheckUserStruct'
       produces:
       - application/json
       responses:
@@ -9694,7 +9538,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.PrivacyStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.PrivacyStruct'
       produces:
       - application/json
       responses:
@@ -9720,7 +9564,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.SetProfilePictureStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.SetProfilePictureStruct'
       produces:
       - application/json
       responses:
@@ -9750,7 +9594,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.SetProfilePictureStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.SetProfilePictureStruct'
       produces:
       - application/json
       responses:
@@ -9780,7 +9624,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.SetProfilePictureStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.SetProfilePictureStruct'
       produces:
       - application/json
       responses:
@@ -9810,7 +9654,7 @@ paths:
         name: message
         required: true
         schema:
-          $ref: '#/definitions/github_com_EvolutionAPI_evolution-go_pkg_user_service.BlockStruct'
+          $ref: '#/definitions/github_com_evolution-foundation_evolution-go_pkg_user_service.BlockStruct'
       produces:
       - application/json
       responses:
