@@ -163,9 +163,13 @@ curl -X POST http://localhost:4000/user/check \
 
 ## Avatar do Usuário
 
-Obtém a URL da foto de perfil de um usuário.
+Obtém a URL da foto de perfil, sem baixar a imagem.
 
 **Endpoint**: `POST /user/avatar`
+
+**Headers**: `Content-Type: application/json` e `apikey: TOKEN-DA-INSTANCIA`.
+A instância autenticada determina a sessão; um `instanceId` enviado no corpo não
+seleciona outra instância.
 
 **Body**:
 ```json
@@ -179,34 +183,59 @@ Obtém a URL da foto de perfil de um usuário.
 
 | Campo | Tipo | Obrigatório | Descrição |
 |-------|------|-------------|-----------|
-| `number` | string | ✅ Sim | Número do usuário |
-| `preview` | bool | ❌ Não | Se true, retorna preview (menor resolução) |
+| `number` | string | ✅ Sim | PN JID canônico, `@lid` conhecido pela sessão ou número de telefone; JIDs de grupo existentes também são aceitos |
+| `preview` | bool | ❌ Não | `true` solicita preview; omitido/`false` solicita imagem completa |
+
+A requisição possui um prazo de 8s compartilhado pelo banco no início da sessão,
+espera pelo cliente autenticado (até 2s), resolução de LID e query de foto.
+O cancelamento HTTP é propagado. Depois de iniciado, o cliente permanece sob
+responsabilidade do serviço e pode continuar a conexão após o término da requisição.
+
+Os JIDs perdem o prefixo `+` e a parte do dispositivo antes do IQ. Quando houver
+um mapeamento de LID para PN no store da própria sessão, o PN é usado; um mapeamento
+ausente ou uma falha comum do store mantém o LID original. Timeout/cancelamento
+interrompe o fluxo. A consulta não envia `ExistingID` e não repete o IQ automaticamente.
 
 **Resposta de Sucesso (200)**:
 ```json
 {
   "message": "success",
   "data": {
-    "URL": "https://pps.whatsapp.net/v/...",
-    "ID": "abc123",
-    "Type": "image",
-    "DirectPath": "/v/..."
+    "url": "https://pps.whatsapp.net/v/...",
+    "id": "abc123",
+    "type": "image",
+    "direct_path": "/v/...",
+    "hash": null
   }
 }
 ```
 
-**Resposta de Erro (500)**:
+`hash` é uma string em base64 quando presente, ou `null`. Uma foto nula ou sem URL
+não produz resposta de sucesso.
+
+**Respostas de erro**:
+
+| HTTP | Quando |
+|------|--------|
+| 400 | Corpo nulo/inválido, número ausente ou PN/LID inválido |
+| 401 | `apikey` ausente ou não autorizado |
+| 429 | WhatsApp `rate-overlimit` |
+| 504 | Timeout/cancelamento no banco, espera da sessão, resolução de LID ou query de foto |
+| 500 | Sessão indisponível, foto ausente/oculta ou demais falhas |
+
+Erros HTTP usam mensagens públicas, sem URL privada da foto, detalhes de banco ou credenciais.
+
 ```json
 {
-  "error": "no profile picture found"
+  "error": "failed to query WhatsApp"
 }
 ```
 
 **Exemplo cURL**:
 ```bash
-curl -X POST http://localhost:4000/user/avatar \
+curl -X POST http://localhost:${SERVER_PORT:-8080}/user/avatar \
   -H "Content-Type: application/json" \
-  -H "apikey: SUA-CHAVE-API" \
+  -H "apikey: TOKEN-DA-INSTANCIA" \
   -d '{
     "number": "5511999999999",
     "preview": true
