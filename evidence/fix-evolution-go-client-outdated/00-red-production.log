@@ -1,0 +1,13 @@
+# Sanitized production incident excerpt
+# Instance IDs, account identifiers, hostnames, IPs, timestamps and credentials removed.
+# No secret-bearing request or response payload is retained.
+# Values below are copied from the user's attached production log with instance
+# UUID, account JID, IP address, timestamps and credentials omitted.
+
+[version discovery] latest WhatsApp Web version resolved to 2.3000.1052878631
+[Client ERROR] Client outdated (405) connect failure (client version: 2.3000.1042386815)
+[instance connect] POST /instance/connect returned HTTP 200 before the asynchronous handshake failure
+[instance qr] GET /instance/qr repeatedly returned HTTP 400 because no QR became available
+
+# Expected invariant: the dynamically resolved 2.3000.1052878631 must update
+# store.GetWAVersion and BaseClientPayload.UserAgent.AppVersion before NewClient/connect.

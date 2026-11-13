@@ -5,6 +5,7 @@
 **Docker:** `evoapicloud/evolution-go:0.7.3`
 
 ### 🐛 Bug Fixes
+- **NATS com URL vazia.** A inicialização agora desativa o produtor quando `NATS_URL` não está configurada, evitando tentar conectar com uma URL vazia.
 - **`Client outdated (405)` on every connect.** Since 2026-11-02 WhatsApp
   rejects the client version sent by 0.7.2 (`2.3000.1042386815`), so every
   instance dropped and could not reconnect. whatsmeow moves to `54038813c47f`,

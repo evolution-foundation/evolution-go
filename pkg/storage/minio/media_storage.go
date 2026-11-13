@@ -110,8 +110,6 @@ func (m *MinioMediaStorage) Store(ctx context.Context, data []byte, fileName str
 		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
 	}
 
-	fmt.Println(presignedURL.String())
-
 	return presignedURL.String(), nil
 }
 
@@ -148,8 +146,6 @@ func (m *MinioMediaStorage) GetURL(ctx context.Context, fileName string) (string
 	if err != nil {
 		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
 	}
-
-	fmt.Println(presignedURL.String())
 
 	return presignedURL.String(), nil
 }

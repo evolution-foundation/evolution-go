@@ -20,6 +20,15 @@ func NewNatsProducer(
 	natsGlobalEvents []string,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) producer_interfaces.Producer {
+	if url == "" {
+		return &natsProducer{
+			conn:              nil,
+			natsGlobalEnabled: false,
+			natsGlobalEvents:  nil,
+			loggerWrapper:     loggerWrapper,
+		}
+	}
+
 	conn, err := nats.Connect(url)
 	if err != nil {
 		logger.LogError("Failed to connect to NATS: %v", err)

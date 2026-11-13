@@ -196,19 +196,19 @@ func ParseJID(arg string) (whatsmeow_types.JID, bool) {
 	// Use CreateJID for consistent formatting
 	jidString, err := CreateJID(arg)
 	if err != nil {
-		logger.LogWarn("Failed to create JID: %s", err.Error())
+		logger.LogWarn("Failed to create recipient identity")
 		return whatsmeow_types.NewJID("", whatsmeow_types.DefaultUserServer), false
 	}
 
 	// Parse the formatted JID
 	recipient, err := whatsmeow_types.ParseJID(jidString)
 	if err != nil {
-		logger.LogWarn("Invalid JID: %s", err.Error())
+		logger.LogWarn("Invalid recipient identity")
 		return recipient, false
 	}
 
 	if recipient.User == "" && !strings.Contains(jidString, "@broadcast") {
-		logger.LogError("Invalid JID. No user specified: %s", jidString)
+		logger.LogError("Invalid recipient identity: no user specified")
 		return recipient, false
 	}
 

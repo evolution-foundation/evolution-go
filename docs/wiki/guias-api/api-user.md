@@ -404,12 +404,13 @@ Bloqueia um contato no WhatsApp.
 {
   "message": "success",
   "data": {
+    "AddressingMode": "lid",
     "DHash": "abc123",
-    "PrevDHash": "def456",
-    "Modifications": [
+    "Items": [
       {
-        "JID": "5511999999999@s.whatsapp.net",
-        "Action": "block"
+        "LID": "123456789012345@lid",
+        "PN": "5511999999999@s.whatsapp.net",
+        "Active": true
       }
     ]
   }
@@ -452,12 +453,13 @@ Desbloqueia um contato previamente bloqueado.
 {
   "message": "success",
   "data": {
+    "AddressingMode": "lid",
     "DHash": "abc123",
-    "PrevDHash": "def456",
-    "Modifications": [
+    "Items": [
       {
-        "JID": "5511999999999@s.whatsapp.net",
-        "Action": "unblock"
+        "LID": "123456789012345@lid",
+        "PN": "5511999999999@s.whatsapp.net",
+        "Active": true
       }
     ]
   }
@@ -492,15 +494,18 @@ apikey: SUA-CHAVE-API
 {
   "message": "success",
   "data": {
+    "AddressingMode": "lid",
     "DHash": "abc123",
-    "Modifications": [
+    "Items": [
       {
-        "JID": "5511999999999@s.whatsapp.net",
-        "Action": "block"
+        "LID": "123456789012345@lid",
+        "PN": "5511999999999@s.whatsapp.net",
+        "Active": true
       },
       {
-        "JID": "5511888888888@s.whatsapp.net",
-        "Action": "block"
+        "LID": "987654321098765@lid",
+        "PN": "5511888888888@s.whatsapp.net",
+        "Active": true
       }
     ]
   }

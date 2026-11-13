@@ -52,22 +52,22 @@ func (p *webhookProducer) Produce(
 
 func (p *webhookProducer) sendWebhookWithRetry(url string, body []byte, maxRetries int, retryInterval time.Duration, userID string) {
 	for i := 0; i < maxRetries; i++ {
-		err, responseBody, statusCode := p.sendWebhook(url, body, userID)
+		err, statusCode := p.sendWebhook(url, body, userID)
 		if err == nil {
-			p.loggerWrapper.GetLogger(userID).LogInfo("[%s] webhook sent successfully - url: %s, status: %d, response: %s", userID, url, statusCode, string(responseBody))
+			p.loggerWrapper.GetLogger(userID).LogInfo("[%s] webhook sent successfully - status: %d", userID, statusCode)
 			return
 		}
-		p.loggerWrapper.GetLogger(userID).LogWarn("[%s] webhook failed - url: %s, attempt: %d, error: %v", userID, url, i+1, err)
+		p.loggerWrapper.GetLogger(userID).LogWarn("[%s] webhook failed - attempt: %d, status: %d", userID, i+1, statusCode)
 
 		time.Sleep(retryInterval)
 	}
-	p.loggerWrapper.GetLogger(userID).LogError("[%s] webhook failed after maximum retries - url: %s", userID, url)
+	p.loggerWrapper.GetLogger(userID).LogError("[%s] webhook failed after maximum retries", userID)
 }
 
-func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (error, []byte, int) {
+func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (error, int) {
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
-		return err, nil, 0
+		return err, 0
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -75,20 +75,20 @@ func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (e
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err, nil, 0
+		return err, 0
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	_, err = io.Copy(io.Discard, resp.Body)
 	if err != nil {
-		return fmt.Errorf("erro ao ler resposta: %v", err), nil, 0
+		return fmt.Errorf("erro ao ler resposta: %v", err), resp.StatusCode
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errors.New("received non-2xx response: " + resp.Status), responseBody, resp.StatusCode
+		return errors.New("received non-2xx response: " + resp.Status), resp.StatusCode
 	}
 
-	return nil, responseBody, resp.StatusCode
+	return nil, resp.StatusCode
 }
 
 // CreateGlobalQueues não faz nada para webhook producer
