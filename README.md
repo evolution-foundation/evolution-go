@@ -55,12 +55,11 @@ Evolution Go is one of the messaging engines maintained by Evolution Foundation.
 
 ### Docker (recommended)
 
-```bash
-git clone https://github.com/evolution-foundation/evolution-go.git
-cd evolution-go
-make docker-build
-make docker-run
-```
+For a standard installation, use the official prebuilt image published on Docker Hub. No local Go installation or image build is required.
+
+See the [Docker installation guide](./docs/INSTALLATION.md) for a step-by-step deployment with Docker Compose, PostgreSQL, persistent storage, updates, backups, and troubleshooting.
+
+The guide uses the official `evoapicloud/evolution-go:0.7.3` image and follows the repository's Docker example.
 
 ### Local development
 
@@ -74,7 +73,7 @@ cp .env.example .env
 make dev
 ```
 
-> Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
+Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
 
 ---
 
@@ -181,7 +180,7 @@ evolution-go/
 
 | Component | Technology |
 |---|---|
-| Language | Go 1.24+ |
+| Language | Go 1.26+ |
 | HTTP framework | Gin |
 | WhatsApp | [whatsmeow](https://github.com/tulir/whatsmeow) |
 | Database | PostgreSQL |
@@ -197,6 +196,7 @@ evolution-go/
 
 | Resource | Link |
 |---|---|
+| Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
 | Website | [evolutionfoundation.com.br](https://evolutionfoundation.com.br) |
 | Documentation | [docs.evolutionfoundation.com.br](https://docs.evolutionfoundation.com.br) |
 | Community | [evolutionfoundation.com.br/community](https://evolutionfoundation.com.br/community) |
