@@ -85,12 +85,12 @@ Create `init-db.sql` in the same directory:
 
 ```sql
 \getenv app_db_password APP_DB_PASSWORD
-CREATE ROLE evolution_app LOGIN CREATEDB PASSWORD :'app_db_password';
+CREATE ROLE evolution_app LOGIN PASSWORD :'app_db_password';
 CREATE DATABASE evogo_auth OWNER evolution_app;
 CREATE DATABASE evogo_users OWNER evolution_app;
 ```
 
-The PostgreSQL image runs this script only when its data directory is first initialized. It creates a dedicated, non-superuser login for Evolution Go and makes that role the owner of both application databases. The `CREATEDB` attribute is needed because the application checks for and can create its configured databases automatically; it does not grant superuser access.
+The PostgreSQL image runs this script only when its data directory is first initialized. It creates a dedicated, non-superuser login for Evolution Go and makes that role the owner of both application databases. The role is not a superuser and does not have cluster-wide database-creation privileges. Both application databases are created explicitly and owned by this role.
 
 ## 4. Configure environment variables
 
@@ -204,7 +204,7 @@ Do not delete the PostgreSQL volume to rotate credentials. The `POSTGRES_PASSWOR
 You can use an existing PostgreSQL server instead of the Compose database service:
 
 1. Create the `evogo_auth` and `evogo_users` databases, owned by the configured application role.
-2. Ensure that role has the required database privileges. It must be able to create databases if Evolution Go is expected to create missing databases automatically.
+2. Ensure that role owns both databases and has the required schema and table privileges. The databases should be created in advance; grant `CREATEDB` only if you intentionally want Evolution Go to create missing databases automatically.
 3. Set `POSTGRES_AUTH_DB` and `POSTGRES_USERS_DB` in the Evolution Go service to connection URLs reachable from the container.
 4. Remove the `postgres` service and the `depends_on` section from `compose.yaml`.
 
