@@ -197,7 +197,6 @@ evolution-go/
 | Resource | Link |
 |---|---|
 | Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
-| Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
 | Website | [evolutionfoundation.com.br](https://evolutionfoundation.com.br) |
 | Documentation | [docs.evolutionfoundation.com.br](https://docs.evolutionfoundation.com.br) |
 | Community | [evolutionfoundation.com.br/community](https://evolutionfoundation.com.br/community) |
