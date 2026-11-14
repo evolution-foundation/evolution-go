@@ -53,16 +53,34 @@ Evolution Go is one of the messaging engines maintained by Evolution Foundation.
 
 ## Quick Start
 
+The recommended way to run Evolution Go is with the prebuilt Docker image published by Evolution Foundation. You do **not** need Go, Git, or a local image build for a standard installation.
+
+- **Docker image:** `evoapicloud/evolution-go`
+- **Example version:** `0.7.3`
+- **Default container port:** `8080`
+
+See the complete [Docker installation guide](./docs/INSTALLATION.md) for a ready-to-use Compose deployment with PostgreSQL, persistent storage, updates, backups, and troubleshooting.
+
 ### Docker (recommended)
 
+1. Install Docker Engine and the Docker Compose plugin.
+2. Create a deployment folder and add the `compose.yaml` and `.env` files described in the [installation guide](./docs/INSTALLATION.md).
+3. Generate secure values for the API key and PostgreSQL password, then start the services:
+
 ```bash
-git clone https://github.com/evolution-foundation/evolution-go.git
-cd evolution-go
-make docker-build
-make docker-run
+openssl rand -hex 32
+openssl rand -hex 24
+docker compose up -d
+docker compose logs -f evolution-go
 ```
 
+Open the API at `http://localhost:8080` and Swagger at `http://localhost:8080/swagger/index.html`.
+
+> **Important:** Keep your `.env` file private. Never commit API keys or database passwords. The example deployment uses PostgreSQL and persistent Docker volumes.
+
 ### Local development
+
+For development from source:
 
 ```bash
 git clone https://github.com/evolution-foundation/evolution-go.git
@@ -74,7 +92,7 @@ cp .env.example .env
 make dev
 ```
 
-> Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
+Run `make help` to see all available commands. See [COMMANDS.md](./COMMANDS.md) for detailed workflows.
 
 ---
 
@@ -197,6 +215,7 @@ evolution-go/
 
 | Resource | Link |
 |---|---|
+| Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
 | Website | [evolutionfoundation.com.br](https://evolutionfoundation.com.br) |
 | Documentation | [docs.evolutionfoundation.com.br](https://docs.evolutionfoundation.com.br) |
 | Community | [evolutionfoundation.com.br/community](https://evolutionfoundation.com.br/community) |
