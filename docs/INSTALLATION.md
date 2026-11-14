@@ -197,7 +197,7 @@ Enter the new password when prompted. Then update `APP_DB_PASSWORD` in `.env` to
 docker compose up -d --force-recreate evolution-go
 ```
 
-Do not delete the PostgreSQL volume to rotate credentials. The `POSTGRES_PASSWORD` variable also does not rotate the persisted PostgreSQL administrator password by itself; if you need to change that credential, use the same interactive `\\password postgres` procedure and update `.env` in a coordinated operation.
+Do not delete the PostgreSQL volume to rotate credentials. The `POSTGRES_PASSWORD` variable also does not rotate the persisted PostgreSQL administrator password by itself; if you need to change that credential, use the same interactive `\password postgres` procedure and update `.env` in a coordinated operation.
 
 ## 9. Using an existing PostgreSQL server
 
