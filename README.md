@@ -53,34 +53,15 @@ Evolution Go is one of the messaging engines maintained by Evolution Foundation.
 
 ## Quick Start
 
-The recommended way to run Evolution Go is with the prebuilt Docker image published by Evolution Foundation. You do **not** need Go, Git, or a local image build for a standard installation.
-
-- **Docker image:** `evoapicloud/evolution-go`
-- **Example version:** `0.7.3`
-- **Default container port:** `8080`
-
-See the complete [Docker installation guide](./docs/INSTALLATION.md) for a ready-to-use Compose deployment with PostgreSQL, persistent storage, updates, backups, and troubleshooting.
-
 ### Docker (recommended)
 
-1. Install Docker Engine and the Docker Compose plugin.
-2. Create a deployment folder and add the `compose.yaml` and `.env` files described in the [installation guide](./docs/INSTALLATION.md).
-3. Generate secure values for the API key and PostgreSQL password, then start the services:
+For a standard installation, use the official prebuilt image published on Docker Hub. No local Go installation or image build is required.
 
-```bash
-openssl rand -hex 32
-openssl rand -hex 24
-docker compose up -d
-docker compose logs -f evolution-go
-```
+See the [Docker installation guide](./docs/INSTALLATION.md) for a step-by-step deployment with Docker Compose, PostgreSQL, persistent storage, updates, backups, and troubleshooting.
 
-Open the API at `http://localhost:8080` and Swagger at `http://localhost:8080/swagger/index.html`.
-
-> **Important:** Keep your `.env` file private. Never commit API keys or database passwords. The example deployment uses PostgreSQL and persistent Docker volumes.
+The guide uses the official `evoapicloud/evolution-go:0.7.3` image and follows the repository's Docker example.
 
 ### Local development
-
-For development from source:
 
 ```bash
 git clone https://github.com/evolution-foundation/evolution-go.git
@@ -199,7 +180,7 @@ evolution-go/
 
 | Component | Technology |
 |---|---|
-| Language | Go 1.24+ |
+| Language | Go 1.26+ |
 | HTTP framework | Gin |
 | WhatsApp | [whatsmeow](https://github.com/tulir/whatsmeow) |
 | Database | PostgreSQL |
@@ -215,6 +196,7 @@ evolution-go/
 
 | Resource | Link |
 |---|---|
+| Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
 | Installation Guide | [Docker Installation](./docs/INSTALLATION.md) |
 | Website | [evolutionfoundation.com.br](https://evolutionfoundation.com.br) |
 | Documentation | [docs.evolutionfoundation.com.br](https://docs.evolutionfoundation.com.br) |
