@@ -75,6 +75,10 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 		c.File("manager/dist/index.html")
 	})
 
+	// NOTE: the chat-style sender UI (/sender, /chat and the "/" redirect) is
+	// registered from main.go via sender_handler.RegisterRoutes, because it needs
+	// *config.Config to bootstrap the page. Same pattern as the passkey routes.
+
 	eng.GET("/server/ok", r.serverHandler.ServerOk)
 
 	routes := eng.Group("/instance")

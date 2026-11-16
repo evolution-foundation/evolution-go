@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evolution GO</title>
+<style>
+  /* ---------- WhatsApp Web (dark) palette ---------- */
+  :root {
+    --wa-bg:        #111b21;
+    --wa-panel:     #202c33;
+    --wa-panel-2:   #2a3942;
+    --wa-chat-bg:   #0b141a;
+    --wa-hover:     #202c33;
+    --wa-active:    #2a3942;
+    --wa-border:    #222d34;
+    --wa-divider:   rgba(134,150,160,.15);
+    --wa-text:      #e9edef;
+    --wa-muted:     #8696a0;
+    --wa-green:     #00a884;
+    --wa-green-d:   #008069;
+    --wa-out:       #005c4b;
+    --wa-in:        #202c33;
+    --wa-tick:      #53bdeb;
+    --wa-pill:      #182229;
+    --wa-danger:    #f15c6d;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0c1317; color: var(--wa-text);
+    font: 15px/1.4 "Segoe UI", Helvetica, "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--wa-green); outline-offset: -2px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(134,150,160,.3); border-radius: 3px; }
+  .icon { width: 24px; height: 24px; fill: currentColor; display: block; }
+  .iconbtn {
+    color: var(--wa-muted); padding: 8px; border-radius: 50%;
+    display: grid; place-items: center; flex: none;
+  }
+  .iconbtn:hover { background: rgba(134,150,160,.12); color: var(--wa-text); }
+  .avatar {
+    border-radius: 50%; background: #6a7175; color: #fff;
+    display: grid; place-items: center; font-weight: 500; flex: none;
+    overflow: hidden; user-select: none;
+  }
+
+  /* ---------- shell ---------- */
+  #app {
+    height: 100%; display: grid;
+    grid-template-columns: minmax(300px, 30%) 1fr;
+    background: var(--wa-bg);
+    border-left: 1px solid var(--wa-border);
+  }
+  @media (min-width: 1441px) { #app { max-width: 1636px; margin: 0 auto; } }
+
+  /* ---------- left pane ---------- */
+  #left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--wa-border); }
+  .pane-head {
+    height: 59px; flex: none; background: var(--wa-panel);
+    display: flex; align-items: center; gap: 4px; padding: 0 16px;
+  }
+  .pane-head .avatar { width: 40px; height: 40px; font-size: 15px; }
+  .pane-head .spacer { flex: 1; }
+  #searchWrap { flex: none; background: var(--wa-bg); padding: 7px 12px; display: flex; gap: 8px; align-items: center; }
+  .search {
+    flex: 1; display: flex; align-items: center; gap: 12px;
+    background: var(--wa-panel); border-radius: 8px; padding: 0 12px; height: 35px;
+  }
+  .search svg { width: 18px; height: 18px; fill: var(--wa-muted); flex: none; }
+  .search input { flex: 1; background: none; border: 0; outline: 0; font-size: 14px; }
+  .search input::placeholder { color: var(--wa-muted); }
+
+  #chatList { flex: 1; overflow-y: auto; min-height: 0; }
+  .chat-item {
+    width: 100%; height: 72px; display: flex; align-items: center; gap: 15px;
+    padding: 0 16px 0 13px; text-align: left; position: relative;
+  }
+  .chat-item::after {
+    content: ""; position: absolute; left: 77px; right: 0; bottom: 0;
+    border-bottom: 1px solid var(--wa-divider);
+  }
+  .chat-item:hover { background: var(--wa-hover); }
+  .chat-item[aria-current="true"] { background: var(--wa-active); }
+  .chat-item .avatar { width: 49px; height: 49px; font-size: 18px; }
+  .ci-body { flex: 1; min-width: 0; }
+  .ci-top { display: flex; align-items: baseline; gap: 8px; }
+  .ci-name {
+    flex: 1; min-width: 0; font-size: 17px; color: var(--wa-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ci-time { font-size: 12px; color: var(--wa-muted); flex: none; }
+  .ci-time.unread { color: var(--wa-green); }
+  .ci-bottom { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .ci-preview {
+    flex: 1; min-width: 0; font-size: 14px; color: var(--wa-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ci-badge {
+    flex: none; min-width: 20px; height: 20px; border-radius: 10px;
+    background: var(--wa-green); color: #111b21; font-size: 12px; font-weight: 600;
+    display: grid; place-items: center; padding: 0 6px;
+  }
+  .list-empty { color: var(--wa-muted); font-size: 14px; text-align: center; padding: 40px 24px; }
+
+  /* ---------- right pane ---------- */
+  #right { display: flex; flex-direction: column; min-height: 0; position: relative; }
+
+  #intro {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--wa-bg); border-bottom: 6px solid var(--wa-green-d); text-align: center; padding: 24px;
+  }
+  #intro .ring {
+    width: 250px; height: 250px; border-radius: 50%; background: #202c33;
+    display: grid; place-items: center; margin-bottom: 28px;
+  }
+  #intro .ring svg { width: 120px; height: 120px; fill: #364147; }
+  #intro h1 { font-size: 32px; font-weight: 300; color: #e9edef; margin: 0 0 16px; }
+  #intro p { font-size: 14px; color: var(--wa-muted); max-width: 560px; margin: 0; }
+  #intro hr { width: 420px; max-width: 80%; border: 0; border-top: 1px solid var(--wa-divider); margin: 28px 0 22px; }
+
+  #chatView { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #chatHead { cursor: default; }
+  #chatHead .avatar { width: 40px; height: 40px; font-size: 15px; }
+  .head-meta { min-width: 0; margin-left: 15px; }
+  .head-name { font-size: 16px; color: var(--wa-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head-sub { font-size: 13px; color: var(--wa-muted); }
+
+  /* chat wallpaper: subtle WhatsApp-ish doodle wash */
+  #messages {
+    flex: 1; overflow-y: auto; min-height: 0; padding: 12px 6% 8px;
+    display: flex; flex-direction: column; gap: 2px;
+    background-color: var(--wa-chat-bg);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(255,255,255,.018) 0 9px, transparent 10px),
+      radial-gradient(circle at 72% 61%, rgba(255,255,255,.014) 0 13px, transparent 14px),
+      radial-gradient(circle at 41% 84%, rgba(255,255,255,.012) 0 7px, transparent 8px);
+    background-size: 260px 260px, 340px 340px, 200px 200px;
+  }
+  .divider { align-self: center; margin: 12px 0; }
+  .divider span {
+    background: var(--wa-pill); color: var(--wa-muted); font-size: 12.5px; font-weight: 500;
+    text-transform: uppercase; padding: 5px 12px; border-radius: 7.5px;
+    box-shadow: 0 1px .5px rgba(11,20,26,.13);
+  }
+  .row { display: flex; margin-bottom: 2px; }
+  .row.out { justify-content: flex-end; }
+  .bubble {
+    position: relative; max-width: 65%; min-width: 88px;
+    padding: 6px 7px 8px 9px; border-radius: 7.5px; font-size: 14.2px;
+    box-shadow: 0 1px .5px rgba(11,20,26,.13); color: var(--wa-text);
+  }
+  .row.in  .bubble { background: var(--wa-in);  border-top-left-radius: 0; }
+  .row.out .bubble { background: var(--wa-out); border-top-right-radius: 0; }
+  /* bubble tails */
+  .row.in .bubble::before, .row.out .bubble::before {
+    content: ""; position: absolute; top: 0; width: 8px; height: 13px;
+  }
+  .row.in .bubble::before {
+    left: -8px;
+    background: var(--wa-in);
+    clip-path: polygon(100% 0, 100% 100%, 0 0);
+  }
+  .row.out .bubble::before {
+    right: -8px;
+    background: var(--wa-out);
+    clip-path: polygon(0 0, 0 100%, 100% 0);
+  }
+  .bubble.err { background: #3b2226; }
+  .bubble .text { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 56px; }
+  .bubble .media { display: block; max-width: 330px; width: 100%; border-radius: 6px; margin-bottom: 4px; }
+  .bubble .filechip {
+    display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.18);
+    border-radius: 6px; padding: 10px 12px; margin-bottom: 4px;
+  }
+  .bubble .filechip svg { width: 22px; height: 22px; fill: var(--wa-muted); flex: none; }
+  .bubble .mediaph {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    width: 240px; height: 148px; background: rgba(0,0,0,.22); border-radius: 6px;
+    margin-bottom: 4px; color: var(--wa-muted); font-size: 13px;
+  }
+  .bubble .mediaph svg { width: 34px; height: 34px; fill: currentColor; }
+  .bubble .meta {
+    float: right; margin: -14px -2px 0 8px; height: 15px;
+    display: flex; align-items: center; gap: 3px;
+    font-size: 11px; color: rgba(233,237,239,.6); white-space: nowrap;
+  }
+  .bubble .meta svg { width: 16px; height: 11px; fill: currentColor; }
+  .bubble .meta.read { color: var(--wa-tick); }
+
+  /* ---------- composer ---------- */
+  #composer {
+    flex: none; min-height: 62px; background: var(--wa-panel);
+    display: flex; align-items: flex-end; gap: 8px; padding: 8px 16px;
+  }
+  #composer .iconbtn { margin-bottom: 3px; }
+  .input-wrap { flex: 1; background: var(--wa-panel-2); border-radius: 8px; padding: 9px 12px; }
+  #text {
+    width: 100%; max-height: 140px; background: none; border: 0; outline: 0; resize: none;
+    font-size: 15px; line-height: 20px; display: block;
+  }
+  #text::placeholder { color: var(--wa-muted); }
+  #sendBtn { color: var(--wa-muted); }
+  #sendBtn.ready { color: var(--wa-green); }
+
+  .popover {
+    position: absolute; bottom: 70px; left: 16px; z-index: 20;
+    background: var(--wa-panel); border-radius: 10px; padding: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  #emojiPanel { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; width: 320px; }
+  #emojiPanel button { font-size: 22px; padding: 4px; border-radius: 6px; line-height: 1.2; }
+  #emojiPanel button:hover { background: var(--wa-panel-2); }
+  #attachMenu { left: auto; right: 16px; padding: 10px 6px; min-width: 210px; }
+  #attachMenu button {
+    display: flex; align-items: center; gap: 16px; width: 100%;
+    padding: 10px 14px; border-radius: 6px; font-size: 15px; text-align: left;
+  }
+  #attachMenu button:hover { background: var(--wa-panel-2); }
+  #attachMenu .swatch { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  #attachMenu .swatch svg { width: 20px; height: 20px; fill: #fff; }
+
+  /* ---------- modals ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(11,20,26,.75); z-index: 50;
+    display: grid; place-items: center; padding: 20px;
+  }
+  .modal { background: var(--wa-panel); border-radius: 10px; width: 100%; max-width: 420px; overflow: hidden; }
+  .modal-head { background: var(--wa-green-d); padding: 20px 22px; display: flex; align-items: center; gap: 16px; }
+  .modal-head h2 { margin: 0; font-size: 19px; font-weight: 500; }
+  .modal-body { padding: 20px 22px 22px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--wa-green); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; background: transparent; border: 0; border-bottom: 2px solid var(--wa-green);
+    padding: 7px 2px; font-size: 15px; outline: 0;
+  }
+  .field select { background: var(--wa-panel); }
+  .field .note { font-size: 12px; color: var(--wa-muted); margin-top: 6px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  .btn {
+    background: var(--wa-green); color: #111b21; font-weight: 600;
+    border-radius: 24px; padding: 10px 24px;
+  }
+  .btn.flat { background: transparent; color: var(--wa-green); }
+  .status-line { font-size: 13px; margin-top: 4px; min-height: 18px; }
+  .status-line.err { color: var(--wa-danger); }
+  .status-line.ok { color: var(--wa-green); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--wa-panel-2); color: var(--wa-text); padding: 11px 20px;
+    border-radius: 8px; font-size: 14px; z-index: 80; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  @media (max-width: 900px) {
+    #app { grid-template-columns: 1fr; }
+    #left.hide-mobile { display: none; }
+    #right.hide-mobile { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- reusable icon defs -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M15.009 13.805h-.636l-.22-.219a5.184 5.184 0 001.256-3.386 5.207 5.207 0 10-5.207 5.208 5.183 5.183 0 003.385-1.255l.221.22v.635l4.004 3.999 1.194-1.195-3.997-4.007zm-4.808 0a3.605 3.605 0 110-7.21 3.605 3.605 0 010 7.21z"/></symbol>
+  <symbol id="i-newchat" viewBox="0 0 24 24"><path d="M9.53 2.24a1 1 0 100 2h7.44l-8.2 8.2a1 1 0 101.42 1.42l8.2-8.2v7.44a1 1 0 102 0V2.24H9.53z"/><path d="M4 5.5A1.5 1.5 0 015.5 4H10a1 1 0 100-2H5.5A3.5 3.5 0 002 5.5v13A3.5 3.5 0 005.5 22h13a3.5 3.5 0 003.5-3.5V14a1 1 0 10-2 0v4.5a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 18.5v-13z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M12 7a2 2 0 100-4 2 2 0 000 4zm0 7a2 2 0 100-4 2 2 0 000 4zm0 7a2 2 0 100-4 2 2 0 000 4z"/></symbol>
+  <symbol id="i-emoji" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zM8.5 11a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm7 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM12 17.5c2.03 0 3.8-1.11 4.75-2.75H7.25A5.49 5.49 0 0012 17.5z"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M16.5 6.75v7.79a4.5 4.5 0 11-9 0V7.5a3 3 0 016 0v6.79a1.5 1.5 0 11-3 0V7.5H9v6.79a3 3 0 106 0V6.75a4.5 4.5 0 10-9 0v7.79a6 6 0 1012 0V6.75h-1.5z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816L1.112 13.845l-.011 7.912z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 11"><path d="M11.071.653a.457.457 0 00-.304-.102.493.493 0 00-.381.178l-6.19 7.636-2.405-2.272a.463.463 0 00-.336-.146.47.47 0 00-.343.146l-.311.31a.445.445 0 00-.14.337c0 .134.047.248.14.336l2.996 2.996a.724.724 0 00.501.203.697.697 0 00.546-.266l6.646-8.417a.497.497 0 00.101-.298.441.441 0 00-.152-.343l-.368-.298z"/></symbol>
+  <symbol id="i-checks" viewBox="0 0 16 11"><path d="M15.01.653a.457.457 0 00-.304-.102.493.493 0 00-.381.178L8.136 8.365 7.02 7.31l-.802.99 1.415 1.324a.724.724 0 00.501.203.697.697 0 00.546-.266l6.646-8.417a.497.497 0 00.101-.298.441.441 0 00-.152-.343l-.265-.15zM11.071.653a.457.457 0 00-.304-.102.493.493 0 00-.381.178l-6.19 7.636-2.405-2.272a.463.463 0 00-.336-.146.47.47 0 00-.343.146l-.311.31a.445.445 0 00-.14.337c0 .134.047.248.14.336l2.996 2.996a.724.724 0 00.501.203.697.697 0 00.546-.266l6.646-8.417a.497.497 0 00.101-.298.441.441 0 00-.152-.343l-.368-.298z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 15"><path d="M9.75 7.712H8.25V5.474a.75.75 0 00-1.5 0v2.988c0 .414.336.75.75.75h2.25a.75.75 0 000-1.5z"/><path d="M8 1.5A6.5 6.5 0 118 14.5 6.5 6.5 0 018 1.5zm0-1.5a8 8 0 100 16A8 8 0 008 0z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-.98l2.11-1.65a.5.5 0 00.12-.64l-2-3.46a.5.5 0 00-.6-.22l-2.49 1a7.3 7.3 0 00-1.69-.98l-.38-2.65A.49.49 0 0014 2h-4a.49.49 0 00-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 00-.6.22l-2 3.46a.5.5 0 00.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.65.07.97L2.47 14.6a.5.5 0 00-.12.64l2 3.46c.14.24.44.33.6.22l2.49-1c.52.39 1.08.73 1.69.98l.38 2.65c.04.28.25.42.49.42h4c.24 0 .45-.14.49-.42l.38-2.65a7.3 7.3 0 001.69-.98l2.49 1c.16.11.46.02.6-.22l2-3.46a.5.5 0 00-.12-.64l-2.11-1.63z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></symbol>
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2a10 10 0 00-8.62 15.06L2 22l4.94-1.38A10 10 0 1012 2zm0 18a8 8 0 01-4.08-1.12l-.29-.17-3.02.84.83-3.02-.17-.3A8 8 0 1112 20z"/><path d="M8.6 7.4c-.2 0-.5.1-.7.3-.3.3-.7.9-.7 1.7 0 .9.6 1.7.7 1.9.1.2 1.2 2 3 2.8 1.5.7 1.9.6 2.3.6.4 0 1.2-.5 1.4-1 .2-.5.2-.9.1-1l-.4-.2-1.3-.6c-.2-.1-.4-.1-.5.1l-.5.7c-.1.1-.2.2-.4.1-.2-.1-.8-.3-1.5-.9-.6-.5-.9-1-1-1.2-.1-.2 0-.3.1-.4l.3-.4c.1-.1.1-.2.2-.3v-.3l-.6-1.3c-.1-.3-.2-.3-.4-.3h-.1z"/></symbol>
+</svg>
+
+<div id="app">
+
+  <!-- ============ LEFT: chat list ============ -->
+  <div id="left">
+    <div class="pane-head">
+      <div class="avatar" id="meAvatar" title="Connected account">?</div>
+      <span class="spacer"></span>
+      <button class="iconbtn" id="newChatBtn" title="New chat" aria-label="New chat">
+        <svg class="icon"><use href="#i-newchat"/></svg>
+      </button>
+      <button class="iconbtn" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg class="icon"><use href="#i-gear"/></svg>
+      </button>
+    </div>
+
+    <div id="searchWrap">
+      <div class="search">
+        <svg><use href="#i-search"/></svg>
+        <label class="sr" for="search">Search chats</label>
+        <input id="search" type="text" placeholder="Search or start a new chat">
+      </div>
+    </div>
+
+    <div id="chatList" role="list"></div>
+  </div>
+
+  <!-- ============ RIGHT: conversation ============ -->
+  <div id="right">
+
+    <div id="intro">
+      <div class="ring"><svg><use href="#i-logo"/></svg></div>
+      <h1>Evolution GO Sender</h1>
+      <p>Send and receive WhatsApp messages through your own API. Pick a chat on the
+         left, or start a new one — numbers you message are saved automatically.</p>
+      <hr>
+      <p id="introStatus">Loading instances…</p>
+    </div>
+
+    <div id="chatView" hidden>
+      <div class="pane-head" id="chatHead">
+        <button class="iconbtn" id="backBtn" title="Back" aria-label="Back to chats" style="display:none">
+          <svg class="icon"><use href="#i-back"/></svg>
+        </button>
+        <div class="avatar" id="peerAvatar">?</div>
+        <div class="head-meta">
+          <div class="head-name" id="peerName"></div>
+          <div class="head-sub" id="peerSub"></div>
+        </div>
+        <span class="spacer"></span>
+        <button class="iconbtn" id="clearBtn" title="Clear this chat history" aria-label="Clear chat history">
+          <svg class="icon"><use href="#i-menu"/></svg>
+        </button>
+      </div>
+
+      <div id="messages" role="log" aria-live="polite" aria-label="Messages"></div>
+
+      <div class="popover" id="emojiPanel" hidden></div>
+
+      <div class="popover" id="attachMenu" hidden>
+        <button type="button" data-kind="image">
+          <span class="swatch" style="background:#bf59cf"><svg><use href="#i-image"/></svg></span>
+          Photos &amp; videos
+        </button>
+        <button type="button" data-kind="document">
+          <span class="swatch" style="background:#5157ae"><svg><use href="#i-doc"/></svg></span>
+          Document
+        </button>
+      </div>
+
+      <form id="composer">
+        <button class="iconbtn" type="button" id="emojiBtn" title="Emoji" aria-label="Insert emoji">
+          <svg class="icon"><use href="#i-emoji"/></svg>
+        </button>
+        <button class="iconbtn" type="button" id="attachBtn" title="Attach" aria-label="Attach a file">
+          <svg class="icon"><use href="#i-clip"/></svg>
+        </button>
+        <div class="input-wrap">
+          <label class="sr" for="text">Type a message</label>
+          <textarea id="text" rows="1" placeholder="Type a message"></textarea>
+        </div>
+        <button class="iconbtn" type="submit" id="sendBtn" title="Send" aria-label="Send message">
+          <svg class="icon"><use href="#i-send"/></svg>
+        </button>
+      </form>
+      <input type="file" id="fileInput" hidden>
+    </div>
+  </div>
+</div>
+
+<!-- ============ new chat modal ============ -->
+<div class="overlay" id="newChatModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ncTitle">
+    <div class="modal-head"><h2 id="ncTitle">New chat</h2></div>
+    <form class="modal-body" id="newChatForm">
+      <div class="field">
+        <label for="ncNumber">Phone number (country code, digits only)</label>
+        <input id="ncNumber" inputmode="tel" placeholder="919644764505" required>
+        <div class="note">Example: 91 for India, then the 10-digit number.</div>
+      </div>
+      <div class="field">
+        <label for="ncName">Name (optional)</label>
+        <input id="ncName" placeholder="e.g. Priya">
+      </div>
+      <div class="modal-actions">
+        <button class="btn flat" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Start chat</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ settings modal ============ -->
+<div class="overlay" id="settingsModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="stTitle">
+    <div class="modal-head">
+      <svg class="icon" style="fill:#fff"><use href="#i-gear"/></svg>
+      <h2 id="stTitle">Settings</h2>
+    </div>
+    <form class="modal-body" id="settingsForm">
+      <div class="field">
+        <label for="adminKey">Global API key</label>
+        <input id="adminKey" type="password" autocomplete="off" spellcheck="false" placeholder="GLOBAL_API_KEY">
+        <div class="note">From your .env — used to list instances and open the live socket.</div>
+      </div>
+      <div class="field">
+        <label for="instance">Instance</label>
+        <select id="instance"><option value="">—</option></select>
+        <div class="note" id="instNote"></div>
+      </div>
+      <div class="status-line" id="stStatus"></div>
+      <div class="modal-actions">
+        <button class="btn flat" type="button" id="liveBtn">Enable live</button>
+        <button class="btn" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Server-injected config. The global API key is embedded only for loopback
+     requests (see pkg/sender/handler); remote clients get an empty object and
+     must use the settings form. -->
+<script id="bootstrap" type="application/json">__EVO_BOOTSTRAP__</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- storage ---------------- */
+  var K = { cfg: "evo.sender.cfg", contacts: "evo.sender.contacts",
+            threads: "evo.sender.threads", last: "evo.sender.last",
+            lids: "evo.sender.lids" };
+  var MAX_PER_THREAD = 300;
+
+  function load(k, d) {
+    try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : d; } catch (e) { return d; }
+  }
+  // dataUrl is intentionally dropped: base64 media would blow the 5MB quota.
+  function saveThreads() {
+    try {
+      localStorage.setItem(K.threads, JSON.stringify(threads, function (key, val) {
+        // Raw media bytes would blow the ~5MB quota in a couple of photos. Only
+        // the small `desc` descriptor is persisted; bytes are re-fetched on demand.
+        return (key === "dataUrl" || key === "base64") ? undefined : val;
+      }));
+    } catch (e) { /* quota */ }
+  }
+  function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  var cfg      = load(K.cfg, { adminKey: "", instanceId: "" });
+  var contacts = load(K.contacts, []);
+  var threads  = load(K.threads, {});
+  var current  = load(K.last, "") || "";
+  var lidMap  = load(K.lids, {});   // LID -> phone number, resolved server-side
+  var instances = [], filter = "";
+  var ws = null, wsRetry = null, liveWanted = false, autoLiveTried = false;
+  var pendingLids = {}, lidTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------------- helpers ---------------- */
+  function jidToKey(jid) {
+    if (!jid) return "";
+    var s = String(jid), at = s.indexOf("@");
+    var domain = at === -1 ? "" : s.slice(at + 1);
+    var user = at === -1 ? s : s.slice(0, at);
+    var c = user.indexOf(":"); if (c !== -1) user = user.slice(0, c);
+    if (domain === "g.us" || domain === "newsletter" || domain === "broadcast") return user + "@" + domain;
+    return user.replace(/\D/g, "");
+  }
+  function digits(v) { return String(v || "").replace(/\D/g, ""); }
+  function isGroup(k) { return String(k).indexOf("@") !== -1; }
+  function pretty(k) { return isGroup(k) ? "Group " + String(k).split("@")[0] : "+" + k; }
+
+  function contactOf(key) {
+    for (var i = 0; i < contacts.length; i++) if (contacts[i].number === key) return contacts[i];
+    return null;
+  }
+  function nameFor(key) { var c = contactOf(key); return (c && c.name) ? c.name : pretty(key); }
+
+  function initials(s) {
+    var t = String(s || "").trim();
+    if (!t) return "?";
+    if (/^\+?\d+$/.test(t)) return t.slice(-2);
+    // Drop punctuation first, otherwise "You (saved messages)" yields "Y(".
+    var p = t.replace(/[^\p{L}\p{N}\s]+/gu, " ").trim().split(/\s+/).filter(Boolean);
+    if (!p.length) return t.slice(0, 2).toUpperCase();
+    if (p.length > 1) return (p[0][0] + p[1][0]).toUpperCase();
+    return p[0].slice(0, 2).toUpperCase();
+  }
+  var AV_COLORS = ["#dd7878","#7d9b76","#6a8caf","#b58b5a","#8d7aa8","#5a9ea0","#a8776a","#7f8fa6"];
+  function colorFor(key) {
+    var h = 0, s = String(key);
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
+    return AV_COLORS[h % AV_COLORS.length];
+  }
+  function paintAvatar(el, key, label) {
+    el.textContent = initials(label || key);
+    el.style.background = colorFor(key);
+  }
+
+  function hhmm(ts) {
+    return new Date(ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  function dayKey(ts) { var d = new Date(ts || Date.now()); return d.toDateString(); }
+  function dayLabel(ts) {
+    var d = new Date(ts || Date.now()), now = new Date();
+    var t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var y = new Date(t.getTime() - 86400000);
+    var dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (dd.getTime() === t.getTime()) return "Today";
+    if (dd.getTime() === y.getTime()) return "Yesterday";
+    return d.toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  // WhatsApp increasingly addresses chats by LID (a privacy id such as
+  // 186896156205308@lid) rather than the phone number, which is why a receiver
+  // could show up as a meaningless "+186896156205308". The event still carries the
+  // real phone address — SenderAlt for incoming, RecipientAlt for outgoing — so
+  // prefer whichever candidate is an @s.whatsapp.net JID. If only a LID is
+  // available we key on it for now and let resolveLids() rename it afterwards.
+  function keyFromInfo(info) {
+    var chat = String(info.Chat || "");
+    if (chat.indexOf("@g.us") !== -1 || chat.indexOf("@newsletter") !== -1 ||
+        chat.indexOf("@broadcast") !== -1) {
+      return { key: jidToKey(chat), lid: "" };
+    }
+
+    var order = info.IsFromMe
+      ? [info.RecipientAlt, info.Chat, info.SenderAlt, info.Sender]
+      : [info.SenderAlt, info.Chat, info.Sender, info.RecipientAlt];
+
+    var lid = "";
+    for (var i = 0; i < order.length; i++) {
+      var v = String(order[i] || "");
+      if (!v) continue;
+      if (v.indexOf("@s.whatsapp.net") !== -1) return { key: jidToKey(v), lid: "" };
+      if (v.indexOf("@lid") !== -1 && !lid) lid = jidToKey(v);
+    }
+    if (lid) {
+      var known = lidMap[lid];
+      return { key: known || lid, lid: known ? "" : lid };
+    }
+    return { key: jidToKey(chat || info.Sender), lid: "" };
+  }
+
+  function queueLidResolve(lid) {
+    if (!lid || lidMap[lid] || pendingLids[lid] || !cfg.adminKey) return;
+    pendingLids[lid] = true;
+    clearTimeout(lidTimer);
+    lidTimer = setTimeout(flushLidResolve, 700);   // batch bursts into one request
+  }
+
+  function flushLidResolve() {
+    var list = Object.keys(pendingLids);
+    pendingLids = {};
+    if (!list.length || !cfg.adminKey) return;
+    fetch("/sender/resolve-lids?lids=" + encodeURIComponent(list.join(",")),
+          { headers: { apikey: cfg.adminKey } })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (map) {
+        var changed = false;
+        Object.keys(map).forEach(function (lid) {
+          if (!map[lid]) return;
+          lidMap[lid] = map[lid];
+          changed = true;
+          mergeThread(lid, map[lid]);
+        });
+        if (changed) { saveJSON(K.lids, lidMap); renderList(); renderMessages(); }
+      })
+      .catch(function () { /* keep showing the LID */ });
+  }
+
+  // Fold a LID-keyed conversation into its phone-keyed one. Also covers the case
+  // where the same person arrived under both addresses before we knew the mapping.
+  function mergeThread(from, to) {
+    if (!from || !to || from === to) return;
+
+    var src = threads[from] || [];
+    if (src.length) {
+      var dst = threads[to] || [], seen = {};
+      dst.forEach(function (m) { if (m.id) seen[m.id] = true; });
+      src.forEach(function (m) { if (!m.id || !seen[m.id]) dst.push(m); });
+      dst.sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+      if (dst.length > MAX_PER_THREAD) dst.splice(0, dst.length - MAX_PER_THREAD);
+      threads[to] = dst;
+    }
+    delete threads[from];
+
+    var cFrom = contactOf(from), cTo = contactOf(to);
+    if (cFrom && cTo) {
+      if (!cTo.name && cFrom.name) cTo.name = cFrom.name;
+      cTo.unread = (cTo.unread || 0) + (cFrom.unread || 0);
+      contacts = contacts.filter(function (x) { return x.number !== from; });
+    } else if (cFrom) {
+      cFrom.number = to;
+    }
+    saveJSON(K.contacts, contacts);
+    saveThreads();
+    if (current === from) open(to);
+  }
+
+  function thread(k) { if (!threads[k]) threads[k] = []; return threads[k]; }
+  function push(k, m) {
+    var t = thread(k);
+    t.push(m);
+    if (t.length > MAX_PER_THREAD) t.splice(0, t.length - MAX_PER_THREAD);
+    saveThreads();
+    if (k === current) renderMessages(); 
+    renderList();
+  }
+
+  function upsert(key, name) {
+    var c = contactOf(key);
+    if (c) {
+      if (name && !c.name) { c.name = name; saveJSON(K.contacts, contacts); renderList(); }
+      return;
+    }
+    contacts.unshift({ number: key, name: name || "" });
+    saveJSON(K.contacts, contacts);
+    renderList();
+  }
+
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3800);
+  }
+  function svgIcon(id, cls) {
+    var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    if (cls) s.setAttribute("class", cls);
+    var u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    u.setAttribute("href", "#" + id);
+    s.appendChild(u);
+    return s;
+  }
+
+  /* ---------------- chat list ---------------- */
+  function lastOf(key) { var t = threads[key] || []; return t.length ? t[t.length - 1] : null; }
+
+  function renderList() {
+    var box = $("chatList");
+    box.textContent = "";
+
+    var items = contacts.slice().sort(function (a, b) {
+      var la = lastOf(a.number), lb = lastOf(b.number);
+      return ((lb && lb.ts) || 0) - ((la && la.ts) || 0);
+    });
+    if (filter) {
+      var f = filter.toLowerCase();
+      items = items.filter(function (c) {
+        return (c.name || "").toLowerCase().indexOf(f) !== -1 || c.number.indexOf(f) !== -1;
+      });
+    }
+
+    if (!items.length) {
+      var e = document.createElement("div");
+      e.className = "list-empty";
+      e.textContent = contacts.length
+        ? "No chats match “" + filter + "”."
+        : "No chats yet. Tap the new-chat icon above to message a number.";
+      box.appendChild(e);
+      return;
+    }
+
+    items.forEach(function (c) {
+      var m = lastOf(c.number);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chat-item";
+      b.setAttribute("role", "listitem");
+      b.setAttribute("aria-current", c.number === current ? "true" : "false");
+
+      var av = document.createElement("div");
+      av.className = "avatar";
+      av.setAttribute("aria-hidden", "true");
+      paintAvatar(av, c.number, c.name);
+
+      var body = document.createElement("div");
+      body.className = "ci-body";
+
+      var top = document.createElement("div"); top.className = "ci-top";
+      var nm = document.createElement("span"); nm.className = "ci-name";
+      nm.textContent = c.name || pretty(c.number);
+      var tm = document.createElement("span");
+      tm.className = "ci-time" + (c.unread ? " unread" : "");
+      tm.textContent = m ? hhmm(m.ts) : "";
+      top.appendChild(nm); top.appendChild(tm);
+
+      var bot = document.createElement("div"); bot.className = "ci-bottom";
+      var pv = document.createElement("span"); pv.className = "ci-preview";
+      pv.textContent = m ? ((m.dir === "out" ? "You: " : "") + m.text) : "Tap to start chatting";
+      bot.appendChild(pv);
+      if (c.unread) {
+        var bd = document.createElement("span");
+        bd.className = "ci-badge";
+        bd.textContent = String(c.unread);
+        bd.setAttribute("aria-label", c.unread + " unread messages");
+        bot.appendChild(bd);
+      }
+
+      body.appendChild(top); body.appendChild(bot);
+      b.appendChild(av); b.appendChild(body);
+      b.addEventListener("click", function () { open(c.number); });
+      box.appendChild(b);
+    });
+  }
+
+  /* ---------------- conversation ---------------- */
+  function open(key) {
+    current = key;
+    saveJSON(K.last, key);
+    var c = contactOf(key);
+    if (c && c.unread) { delete c.unread; saveJSON(K.contacts, contacts); }
+    $("intro").hidden = true;
+    $("chatView").hidden = false;
+    paintAvatar($("peerAvatar"), key, c && c.name);
+    $("peerName").textContent = nameFor(key);
+    $("peerSub").textContent = isGroup(key) ? key : "+" + key;
+    renderList(); renderMessages();
+    if (window.innerWidth <= 900) { $("left").classList.add("hide-mobile"); $("backBtn").style.display = ""; }
+    $("text").focus();
+  }
+
+  function renderMessages() {
+    var box = $("messages");
+    box.textContent = "";
+    if (!current) return;
+    var t = thread(current), lastDay = "";
+
+    t.forEach(function (m) {
+      var dk = dayKey(m.ts);
+      if (dk !== lastDay) {
+        lastDay = dk;
+        var d = document.createElement("div");
+        d.className = "divider";
+        var sp = document.createElement("span");
+        sp.textContent = dayLabel(m.ts);
+        d.appendChild(sp);
+        box.appendChild(d);
+      }
+
+      var row = document.createElement("div");
+      row.className = "row " + (m.dir === "out" ? "out" : "in");
+
+      var bub = document.createElement("div");
+      bub.className = "bubble" + (m.status === "failed" ? " err" : "");
+
+      if (m.kind === "image") {
+        if (m.dataUrl) {
+          var img = document.createElement("img");
+          img.className = "media"; img.src = m.dataUrl; img.alt = m.text || "photo";
+          img.loading = "lazy";
+          bub.appendChild(img);
+        } else {
+          // Bytes not in memory (fresh page load). Show a placeholder and pull
+          // them back through /message/downloadmedia using the stored descriptor.
+          var ph = document.createElement("div");
+          ph.className = "mediaph";
+          ph.appendChild(svgIcon("i-image"));
+          var pl = document.createElement("span");
+          pl.textContent = m.desc ? "Loading photo…" : "Photo unavailable";
+          ph.appendChild(pl);
+          bub.appendChild(ph);
+          ensureMedia(m);
+        }
+      } else if (m.kind === "document" || m.kind === "video" || m.kind === "audio") {
+        var chip = document.createElement("div");
+        chip.className = "filechip";
+        chip.appendChild(svgIcon(m.kind === "audio" ? "i-emoji" : "i-doc"));
+        var fn = document.createElement("span");
+        fn.textContent = m.fileName || (m.kind === "video" ? "Video" : m.kind === "audio" ? "Voice message" : "Document");
+        chip.appendChild(fn);
+        bub.appendChild(chip);
+      }
+
+      // Older stored messages used a literal "[image]" caption. The thumbnail or
+      // placeholder already says that visually, so don't print it twice.
+      var isTypeLabel = m.kind && /^\[(image|video|audio|document|sticker)\]$/.test(m.text || "");
+      if (m.text && !isTypeLabel) {
+        var tx = document.createElement("div");
+        tx.className = "text";
+        tx.textContent = m.text;             // textContent → no HTML injection
+        bub.appendChild(tx);
+      }
+
+      var meta = document.createElement("div");
+      meta.className = "meta" + (m.status === "Read" ? " read" : "");
+      var tspan = document.createElement("span");
+      tspan.textContent = hhmm(m.ts);
+      meta.appendChild(tspan);
+      if (m.dir === "out") {
+        if (m.status === "sending")      meta.appendChild(svgIcon("i-clock"));
+        else if (m.status === "sent")    meta.appendChild(svgIcon("i-check"));
+        else if (m.status === "Delivered" || m.status === "Read") meta.appendChild(svgIcon("i-checks"));
+        else if (m.status === "failed") { var x = document.createElement("span"); x.textContent = "!"; meta.appendChild(x); }
+      }
+      bub.appendChild(meta);
+
+      row.appendChild(bub);
+      box.appendChild(row);
+    });
+
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ---------------- API ---------------- */
+  function activeInstance() {
+    for (var i = 0; i < instances.length; i++) if (instances[i].id === cfg.instanceId) return instances[i];
+    return null;
+  }
+  function setStatus(msg, cls) {
+    var s = $("stStatus");
+    s.textContent = msg || "";
+    s.className = "status-line" + (cls ? " " + cls : "");
+  }
+
+  function loadInstances(silent) {
+    if (!cfg.adminKey) {
+      $("introStatus").textContent = "Open Settings (gear icon) and paste your GLOBAL_API_KEY to begin.";
+      return;
+    }
+    fetch("/instance/all", { headers: { apikey: cfg.adminKey } })
+      .then(function (r) {
+        if (r.status === 401) throw new Error("Global API key rejected (401).");
+        if (r.status === 503) throw new Error("Server not activated (503) — activate the licence first.");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        instances = (j && j.data) || [];
+        var sel = $("instance");
+        sel.textContent = "";
+        if (!instances.length) {
+          sel.appendChild(new Option("no instances found", ""));
+          $("introStatus").textContent = "No instances exist yet — create one in the manager first.";
+          return;
+        }
+        instances.forEach(function (i) {
+          sel.appendChild(new Option(i.name + (i.connected ? " · connected" : " · offline"), i.id));
+        });
+        if (!cfg.instanceId || !activeInstance()) cfg.instanceId = instances[0].id;
+        sel.value = cfg.instanceId;
+        saveJSON(K.cfg, cfg);
+        onInstance();
+        seedSelfChat();
+        resolveKnownLids();
+        if (!silent) setStatus("Loaded " + instances.length + " instance(s).", "ok");
+      })
+      .catch(function (e) {
+        setStatus(e.message, "err");
+        $("introStatus").textContent = e.message;
+      });
+  }
+
+  // Give the user a usable chat the moment the page loads: their own number,
+  // taken from the paired instance's JID. WhatsApp calls this "message yourself".
+  // Means you can send without ever typing a number.
+  // Chats saved before status/newsletter filtering existed are dropped here, so
+  // stale "status@broadcast" entries disappear on the next load.
+  function cleanupContacts() {
+    var before = contacts.length;
+    contacts = contacts.filter(function (c) {
+      if (skipChat(c.number)) { delete threads[c.number]; return false; }
+      return true;
+    });
+    if (contacts.length !== before) { saveJSON(K.contacts, contacts); saveThreads(); }
+  }
+
+  // Contacts stored before LID resolution existed still carry LID keys (shown as
+  // a nonsense "+186896156205308"). Ask the server to translate them, then merge
+  // each into its phone-numbered thread. Real phone numbers are simply absent
+  // from whatsmeow_lid_map, so they pass through untouched.
+  function resolveKnownLids() {
+    if (!cfg.adminKey) return;
+    var list = contacts
+      .map(function (c) { return c.number; })
+      .filter(function (n) { return /^\d{6,}$/.test(n) && !lidMap[n]; });
+    if (!list.length) return;
+    list.forEach(function (n) { pendingLids[n] = true; });
+    flushLidResolve();
+  }
+
+  function seedSelfChat() {
+    var inst = activeInstance();
+    if (!inst || !inst.jid) return;
+    var me = jidToKey(inst.jid);
+    if (!me) return;
+    if (!contactOf(me)) upsert(me, "You (saved messages)");
+    if (!current) open(me);
+  }
+
+  function onInstance() {
+    var inst = activeInstance();
+    if (!inst) return;
+    var on = inst.websocketEnable === "enabled" || inst.websocketEnable === "true";
+    var miss = missingEvents(inst);
+    var wired = on && miss.length === 0;
+    liveWanted = on;
+    $("liveBtn").textContent = wired ? "Live enabled ✓" : "Enable live";
+    $("liveBtn").disabled = wired;
+
+    // Self-heal on first load: turn the socket on AND widen the subscription if
+    // events the chat UI depends on are missing, so replies and ticks just work.
+    if (!wired && !autoLiveTried) { autoLiveTried = true; enableLive(); return; }
+    $("instNote").textContent = "Events: " + (inst.events || "none") +
+                                " · live: " + (on ? "on" : "off") +
+                                (miss.length ? " · missing: " + miss.join(",") : "");
+    paintAvatar($("meAvatar"), inst.id, inst.name);
+    $("meAvatar").title = inst.name + (inst.connected ? " (connected)" : " (offline)");
+    $("introStatus").textContent = inst.connected
+      ? "Using instance “" + inst.name + "”. Pick a chat or start a new one."
+      : "Instance “" + inst.name + "” is offline — pair it in the manager first.";
+    if (on) connectWs(); else closeWs();
+  }
+
+  // CallWebhook filters events against the instance's subscription list, so a
+  // chat UI must actually be subscribed to these or the server drops them before
+  // they ever reach the socket: MESSAGE (incoming), SEND_MESSAGE (our own echo),
+  // READ_RECEIPT (delivered/read ticks), CONNECTION (online state).
+  var NEEDED_EVENTS = ["MESSAGE", "SEND_MESSAGE", "READ_RECEIPT", "CONNECTION"];
+
+  function missingEvents(inst) {
+    var have = (inst.events || "").split(",").filter(Boolean);
+    if (have.indexOf("ALL") !== -1) return [];
+    return NEEDED_EVENTS.filter(function (e) { return have.indexOf(e) === -1; });
+  }
+
+  function enableLive() {
+    var inst = activeInstance();
+    if (!inst) { setStatus("Pick an instance first.", "err"); return; }
+
+    // Union, never replace: whatever else the instance was subscribed to stays.
+    var subscribe = (inst.events || "").split(",").filter(Boolean);
+    if (subscribe.indexOf("ALL") === -1) {
+      NEEDED_EVENTS.forEach(function (e) {
+        if (subscribe.indexOf(e) === -1) subscribe.push(e);
+      });
+    }
+    if (!subscribe.length) subscribe = ["ALL"];
+
+    $("liveBtn").disabled = true;
+    setStatus("Wiring up live updates…");
+    fetch("/instance/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: inst.token },
+      body: JSON.stringify({
+        subscribe: subscribe,
+        webhookUrl: inst.webhook || "",         // preserved, not wiped
+        rabbitmqEnable: inst.rabbitmqEnable || "",
+        natsEnable: inst.natsEnable || "",
+        websocketEnable: "enabled"
+      })
+    })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) {
+        inst.websocketEnable = "enabled";
+        if (j && j.data && j.data.eventString) inst.events = j.data.eventString;
+        onInstance();
+        setStatus("Live updates on.", "ok");
+      })
+      .catch(function (e) {
+        $("liveBtn").disabled = false;
+        setStatus("Failed: " + e.message, "err");
+        onInstance();   // autoLiveTried is set, so this finishes the rest of the UI
+      });
+  }
+
+  function sendText(key, text) {
+    var inst = activeInstance();
+    if (!inst) { toast("Open Settings and pick an instance first."); return; }
+    var m = { id: "local-" + Date.now(), dir: "out", text: text, ts: Date.now(), status: "sending" };
+    push(key, m);
+
+    fetch("/send/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: inst.token },
+      body: JSON.stringify({ number: key, text: text })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.j && res.j.error) || ("HTTP " + res.s));
+        var id = res.j && res.j.data && res.j.data.Info && res.j.data.Info.ID;
+        if (id) m.id = id;
+        m.status = "sent";
+        saveThreads(); renderMessages();
+        upsert(key, "");
+      })
+      .catch(function (e) {
+        m.status = "failed"; saveThreads(); renderMessages();
+        toast("Not sent: " + e.message);
+      });
+  }
+
+  function sendFile(key, file, kind, caption) {
+    var inst = activeInstance();
+    if (!inst) { toast("Open Settings and pick an instance first."); return; }
+
+    // /send/media accepts: image (jpeg|png|webp), video (mp4 only), document (any)
+    var type = kind;
+    if (kind === "image") {
+      if (file.type === "video/mp4") type = "video";
+      else if (["image/jpeg","image/png","image/webp"].indexOf(file.type) === -1) {
+        toast("Only JPEG, PNG, WebP images or MP4 video are accepted here — sending as a document.");
+        type = "document";
+      }
+    }
+
+    var m = { id: "local-" + Date.now(), dir: "out", text: caption || "", ts: Date.now(),
+              status: "sending", kind: type === "video" ? "video" : type, fileName: file.name };
+    if (type === "image") {
+      try { m.dataUrl = URL.createObjectURL(file); } catch (e) {}
+    }
+    push(key, m);
+
+    var fd = new FormData();
+    fd.append("number", key);
+    fd.append("type", type);
+    fd.append("caption", caption || "");
+    fd.append("filename", file.name);
+    fd.append("file", file);
+
+    fetch("/send/media", { method: "POST", headers: { apikey: inst.token }, body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.j && res.j.error) || ("HTTP " + res.s));
+        var id = res.j && res.j.data && res.j.data.Info && res.j.data.Info.ID;
+        if (id) m.id = id;
+        m.status = "sent";
+        saveThreads(); renderMessages();
+        upsert(key, "");
+      })
+      .catch(function (e) {
+        m.status = "failed"; saveThreads(); renderMessages();
+        toast("Upload failed: " + e.message);
+      });
+  }
+
+  /* ---------------- websocket ---------------- */
+  function closeWs() {
+    if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
+    if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
+  }
+  function connectWs() {
+    closeWs();
+    if (!cfg.adminKey || !cfg.instanceId) return;
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var url = proto + "//" + location.host + "/ws?token=" + encodeURIComponent(cfg.adminKey) +
+              "&instanceId=" + encodeURIComponent(cfg.instanceId);
+    try { ws = new WebSocket(url); } catch (e) { return; }
+    ws.onclose = function () { if (liveWanted) wsRetry = setTimeout(connectWs, 3000); };
+    ws.onmessage = function (ev) {
+      var f, p;
+      try { f = JSON.parse(ev.data); } catch (e) { return; }
+      try { p = typeof f.payload === "string" ? JSON.parse(f.payload) : f.payload; } catch (e) { return; }
+      if (p) onEvent(p);
+    };
+  }
+
+  function mediaOf(msg) {
+    if (!msg) return null;
+    if (msg.imageMessage)    return { kind: "image",    descKey: "imageMessage",
+                                      cap: msg.imageMessage.caption || "" };
+    if (msg.videoMessage)    return { kind: "video",    descKey: "videoMessage",
+                                      cap: msg.videoMessage.caption || "" };
+    if (msg.audioMessage)    return { kind: "audio",    descKey: "audioMessage", cap: "" };
+    if (msg.documentMessage) return { kind: "document", descKey: "documentMessage",
+                                      cap: msg.documentMessage.caption || "",
+                                      name: msg.documentMessage.fileName || "" };
+    if (msg.stickerMessage)  return { kind: "image",    descKey: "stickerMessage", cap: "" };
+    return null;
+  }
+
+  function guessMime(kind) {
+    if (kind === "image") return "image/jpeg";
+    if (kind === "video") return "video/mp4";
+    if (kind === "audio") return "audio/ogg";
+    return "application/octet-stream";
+  }
+
+  // Records everything needed to display a media message.
+  //
+  // With MINIO_ENABLED=false the raw bytes ride along on data.Message.base64, so
+  // they can be shown immediately. Those bytes are far too large for localStorage,
+  // so the small protobuf descriptor (mediaKey, directPath, sha256 …) is kept
+  // instead and the bytes are re-fetched through /message/downloadmedia after a
+  // reload. Thumbnails are dropped: whatsmeow already strips most, and they would
+  // bloat storage for no benefit.
+  function attachMedia(m, msg, med) {
+    if (!med || !msg) return;
+    m.kind = med.kind;
+    if (med.name) m.fileName = med.name;
+
+    var dk = med.descKey;
+    if (dk && msg[dk]) {
+      try {
+        var desc = JSON.parse(JSON.stringify(msg[dk]));
+        delete desc.jpegThumbnail;
+        delete desc.JPEGThumbnail;
+        delete desc.thumbnail;
+        m.desc = desc;
+        m.descKey = dk;
+      } catch (e) { /* descriptor optional */ }
+    }
+
+    if (msg.base64) {
+      var b = String(msg.base64);
+      // The MinIO-disabled branch attaches base64 but no mimetype, so the real
+      // type comes off the descriptor (verified: a PNG would otherwise be
+      // mislabelled as JPEG).
+      var mime = msg.mimetype || (m.desc && m.desc.mimetype) ||
+                 (dk && msg[dk] && msg[dk].mimetype) || guessMime(med.kind);
+      m.dataUrl = b.indexOf("data:") === 0 ? b : "data:" + mime + ";base64," + b;
+    }
+  }
+
+  // Lazily re-download bytes for a media message we only have a descriptor for.
+  var mediaLoading = {};
+  function ensureMedia(m) {
+    if (!m || m.dataUrl || !m.desc || !m.descKey || mediaLoading[m.id]) return;
+    var inst = activeInstance();
+    if (!inst) return;
+
+    mediaLoading[m.id] = true;
+    var envelope = {};
+    envelope[m.descKey] = m.desc;
+
+    fetch("/message/downloadmedia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: inst.token },
+      body: JSON.stringify({ message: envelope })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var b64 = j && j.data && j.data.base64;
+        if (b64) { m.dataUrl = b64; renderMessages(); }
+      })
+      .catch(function () { /* leave the placeholder in place */ })
+      .then(function () { delete mediaLoading[m.id]; });
+  }
+  function textOf(msg) {
+    if (!msg) return "";
+    if (typeof msg.conversation === "string" && msg.conversation) return msg.conversation;
+    if (msg.extendedTextMessage && msg.extendedTextMessage.text) return msg.extendedTextMessage.text;
+    if (msg.reactionMessage) return "Reacted " + (msg.reactionMessage.text || "");
+    return "";
+  }
+
+  // Status updates (status@broadcast), channels and broadcast lists are not
+  // conversations; without this they turn up as junk chats named after their JID.
+  function skipChat(jid) {
+    var s = String(jid || "");
+    return s.indexOf("@broadcast") !== -1 || s.indexOf("@newsletter") !== -1;
+  }
+
+  function hasId(key, id) {
+    var t = threads[key];
+    if (!t || !id) return false;
+    for (var i = t.length - 1; i >= 0; i--) if (t[i].id === id) return true;
+    return false;
+  }
+
+  function onEvent(p) {
+    var ev = p.event, d = p.data || {};
+
+    // Our own outgoing traffic: messages typed on the phone, or sent through the
+    // API from somewhere other than this tab. Deduped by message ID so the
+    // optimistic bubble we already added isn't duplicated.
+    if ((ev === "Message" || ev === "SendMessage") && (d.Info || {}).IsFromMe) {
+      var oi = d.Info || {};
+      if (skipChat(oi.Chat)) return;
+      var ores = keyFromInfo(oi);
+      var okey = ores.key;
+      queueLidResolve(ores.lid);
+      if (!okey || hasId(okey, oi.ID)) return;
+      var omed = mediaOf(d.Message);
+      var otext = textOf(d.Message) || (omed ? omed.cap : "");
+      if (!otext && !omed) return;
+      var om = { id: oi.ID || ("out-" + Date.now()), dir: "out", text: otext || "",
+                 ts: oi.Timestamp ? (Date.parse(oi.Timestamp) || Date.now()) : Date.now(),
+                 status: "sent" };
+      attachMedia(om, d.Message, omed);
+      upsert(okey, "");
+      push(okey, om);
+      return;
+    }
+
+    if (ev === "Message") {
+      var info = d.Info || {};
+      if (skipChat(info.Chat)) return;
+      var res = keyFromInfo(info);
+      var key = res.key;
+      queueLidResolve(res.lid);
+      if (!key || hasId(key, info.ID)) return;
+
+      var med = mediaOf(d.Message);
+      var body = textOf(d.Message) || (med ? med.cap : "");
+      if (!body && !med) return;
+
+      var m = { id: info.ID || ("in-" + Date.now()), dir: "in",
+                text: body || "", ts: info.Timestamp ? (Date.parse(info.Timestamp) || Date.now()) : Date.now() };
+      attachMedia(m, d.Message, med);
+
+      upsert(key, info.PushName || "");
+      push(key, m);
+
+      if (key !== current) {
+        var c = contactOf(key);
+        if (c) { c.unread = (c.unread || 0) + 1; saveJSON(K.contacts, contacts); renderList(); }
+      }
+      return;
+    }
+
+    if (ev === "Receipt") {
+      if (p.state !== "Read" && p.state !== "Delivered") return;
+      var ids = d.MessageIDs || [], rk = jidToKey(d.Chat);
+      if (lidMap[rk]) rk = lidMap[rk];      // receipts can arrive LID-addressed too
+      var list = threads[rk];
+      if (!list) return;
+      var hit = false;
+      list.forEach(function (m) {
+        if (m.dir === "out" && ids.indexOf(m.id) !== -1 && m.status !== "Read") { m.status = p.state; hit = true; }
+      });
+      if (hit) { saveThreads(); if (rk === current) renderMessages(); }
+      return;
+    }
+
+    if (ev === "Connected" || ev === "Disconnected" || ev === "LoggedOut") {
+      var inst = activeInstance();
+      if (inst) { inst.connected = (ev === "Connected"); onInstance(); }
+    }
+  }
+
+  /* ---------------- emoji ---------------- */
+  var EMOJI = ("😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 😋 😛 😜 🤪 😝 🤗 🤔 🤨 " +
+               "😐 😑 😶 🙄 😏 😣 😥 😮 🤐 😯 😪 😴 😌 😔 😕 🙁 ☹️ 😲 😳 🥺 😦 😧 😨 😰 😢 😭 😱 " +
+               "👍 👎 👌 ✌️ 🤞 🤝 🙏 💪 👏 🎉 🎊 ❤️ 🧡 💛 💚 💙 💜 🖤 🔥 ⭐ ✅ ❌ ⚠️ 💯 👀 🚀").split(" ");
+  function buildEmoji() {
+    var p = $("emojiPanel");
+    if (p.childNodes.length) return;
+    EMOJI.forEach(function (e) {
+      if (!e) return;
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = e;
+      b.setAttribute("aria-label", "Insert " + e);
+      b.addEventListener("click", function () {
+        var ta = $("text");
+        ta.value += e;
+        ta.focus(); grow(); refreshSend();
+      });
+      p.appendChild(b);
+    });
+  }
+
+  /* ---------------- composer ---------------- */
+  var ta = $("text");
+  function grow() { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; }
+  function refreshSend() { $("sendBtn").classList.toggle("ready", ta.value.trim().length > 0); }
+
+  ta.addEventListener("input", function () { grow(); refreshSend(); });
+  ta.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
+  });
+  $("composer").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = ta.value.trim();
+    if (!v || !current) return;
+    sendText(current, v);
+    ta.value = ""; grow(); refreshSend(); ta.focus();
+    $("emojiPanel").hidden = true;
+  });
+
+  $("emojiBtn").addEventListener("click", function () {
+    buildEmoji();
+    $("attachMenu").hidden = true;
+    $("emojiPanel").hidden = !$("emojiPanel").hidden;
+  });
+  $("attachBtn").addEventListener("click", function () {
+    $("emojiPanel").hidden = true;
+    $("attachMenu").hidden = !$("attachMenu").hidden;
+  });
+  Array.prototype.forEach.call($("attachMenu").querySelectorAll("button"), function (b) {
+    b.addEventListener("click", function () {
+      var kind = b.getAttribute("data-kind");
+      var fi = $("fileInput");
+      fi.accept = kind === "image" ? "image/jpeg,image/png,image/webp,video/mp4" : "";
+      fi.setAttribute("data-kind", kind);
+      $("attachMenu").hidden = true;
+      fi.click();
+    });
+  });
+  $("fileInput").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f || !current) { this.value = ""; return; }
+    sendFile(current, f, this.getAttribute("data-kind") || "document", ta.value.trim());
+    ta.value = ""; grow(); refreshSend();
+    this.value = "";
+  });
+
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest("#emojiPanel") && !e.target.closest("#emojiBtn")) $("emojiPanel").hidden = true;
+    if (!e.target.closest("#attachMenu") && !e.target.closest("#attachBtn")) $("attachMenu").hidden = true;
+  });
+
+  /* ---------------- chrome wiring ---------------- */
+  $("search").addEventListener("input", function () { filter = this.value.trim(); renderList(); });
+
+  $("backBtn").addEventListener("click", function () {
+    $("left").classList.remove("hide-mobile");
+    $("chatView").hidden = true; $("intro").hidden = false;
+    current = ""; saveJSON(K.last, ""); renderList();
+  });
+
+  $("clearBtn").addEventListener("click", function () {
+    if (!current) return;
+    if (!confirm("Clear the local message history for " + nameFor(current) + "?\n\n" +
+                 "This only clears what this browser shows — nothing is deleted on WhatsApp.")) return;
+    threads[current] = []; saveThreads(); renderMessages(); renderList();
+  });
+
+  function openModal(id) { $(id).hidden = false; }
+  function closeModal(id) { $(id).hidden = true; }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function (b) {
+    b.addEventListener("click", function () { closeModal(b.closest(".overlay").id); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".overlay"), function (o) {
+    o.addEventListener("click", function (e) { if (e.target === o) closeModal(o.id); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      closeModal("newChatModal"); closeModal("settingsModal");
+      $("emojiPanel").hidden = true; $("attachMenu").hidden = true;
+    }
+  });
+
+  $("newChatBtn").addEventListener("click", function () {
+    openModal("newChatModal"); $("ncNumber").focus();
+  });
+  $("newChatForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var raw = $("ncNumber").value.trim();
+    var key = raw.indexOf("@") !== -1 ? raw : digits(raw);
+    if (!key) return;
+    upsert(key, $("ncName").value.trim());
+    $("ncNumber").value = ""; $("ncName").value = "";
+    closeModal("newChatModal");
+    open(key);
+  });
+
+  $("settingsBtn").addEventListener("click", function () {
+    $("adminKey").value = cfg.adminKey || "";
+    setStatus("");
+    openModal("settingsModal");
+  });
+  $("instance").addEventListener("change", function () {
+    cfg.instanceId = this.value; saveJSON(K.cfg, cfg); onInstance();
+  });
+  $("liveBtn").addEventListener("click", enableLive);
+  $("settingsForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    cfg.adminKey = $("adminKey").value.trim();
+    saveJSON(K.cfg, cfg);
+    loadInstances();
+    closeModal("settingsModal");
+  });
+
+  window.addEventListener("beforeunload", closeWs);
+
+  /* ---------------- boot ---------------- */
+  // The server embeds the global API key for loopback requests, so a local
+  // browser needs zero setup. Anything already saved wins, so a key typed by
+  // hand is never silently replaced.
+  var BOOT = (function () {
+    try { return JSON.parse($("bootstrap").textContent) || {}; } catch (e) { return {}; }
+  })();
+  if (!cfg.adminKey && BOOT.apiKey) { cfg.adminKey = BOOT.apiKey; saveJSON(K.cfg, cfg); }
+
+  cleanupContacts();
+  renderList();
+  refreshSend();
+  if (current && contactOf(current)) open(current);
+  if (cfg.adminKey) loadInstances(true);
+  else $("introStatus").textContent =
+    "Open Settings (gear icon, top-left) and paste your GLOBAL_API_KEY to begin.";
+})();
+</script>
+</body>
+</html>

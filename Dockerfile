@@ -26,6 +26,7 @@ WORKDIR /app
 
 COPY --from=build /build/server .
 COPY --from=build /build/manager/dist ./manager/dist
+COPY --from=build /build/web ./web
 COPY --from=build /build/VERSION ./VERSION
 
 ENV TZ=America/Sao_Paulo

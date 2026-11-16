@@ -57,6 +57,7 @@ import (
 	routes "github.com/evolution-foundation/evolution-go/pkg/routes"
 	send_handler "github.com/evolution-foundation/evolution-go/pkg/sendMessage/handler"
 	send_service "github.com/evolution-foundation/evolution-go/pkg/sendMessage/service"
+	sender_handler "github.com/evolution-foundation/evolution-go/pkg/sender/handler"
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
 	storage_interfaces "github.com/evolution-foundation/evolution-go/pkg/storage/interfaces"
 	minio_storage "github.com/evolution-foundation/evolution-go/pkg/storage/minio"
@@ -240,6 +241,10 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		pollHandler,
 		server_handler.NewServerHandler(),
 	).AssignRoutes(r)
+
+	// Chat-style sender UI (/, /sender, /chat). Registered here rather than in
+	// pkg/routes because it bootstraps the page from *config.Config.
+	sender_handler.RegisterRoutes(r, config)
 
 	if config.ConnectOnStartup {
 		go whatsmeowService.ConnectOnStartup(config.ClientName)
