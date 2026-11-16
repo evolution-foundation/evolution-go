@@ -53,6 +53,8 @@ type WhatsmeowService interface {
 	StartClient(clientData *ClientData)
 	ConnectOnStartup(clientName string)
 	StartInstance(instanceId string) error
+	StartInstanceContext(ctx context.Context, instanceID string) error
+	GetClient(instanceID string) *whatsmeow.Client
 	ReconnectClient(instanceId string) error
 	ClearInstanceCache(instanceId string, token string) error
 	CallWebhook(instance *instance_model.Instance, queueName string, jsonData []byte)
@@ -85,6 +87,7 @@ type whatsmeowService struct {
 	killChannel        map[string](chan bool)
 	userInfoCache      *cache.Cache
 	clientPointer      map[string]*whatsmeow.Client
+	queryClients       *sync.Map
 	myClientPointer    map[string]*MyClient
 	rabbitmqProducer   producer_interfaces.Producer
 	webhookProducer    producer_interfaces.Producer
@@ -207,6 +210,7 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
 
 	// Remover das estruturas
 	delete(w.clientPointer, instanceId)
+	w.queryClients.Delete(instanceId)
 	delete(w.myClientPointer, instanceId)
 	delete(w.killChannel, instanceId)
 
@@ -453,6 +457,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
 	w.clientPointer[cd.Instance.Id] = client
+	w.registerQueryClient(cd.Instance.Id, client)
+	defer w.removeQueryClient(cd.Instance.Id, client)
 
 	if cd.IsProxy {
 		var proxyConfig ProxyConfig
@@ -2361,7 +2367,16 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 }
 
 func (w whatsmeowService) StartInstance(instanceId string) error {
-	instance, err := w.instanceRepository.GetInstanceByID(instanceId)
+	return w.StartInstanceContext(context.Background(), instanceId)
+}
+
+// StartInstanceContext bounds startup's database work. Once launched, StartClient
+// belongs to the service and outlives the initiating HTTP query.
+func (w whatsmeowService) StartInstanceContext(ctx context.Context, instanceId string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	instance, err := w.instanceRepository.GetInstanceByIDContext(ctx, instanceId)
 	if err != nil {
 		return err
 	}
@@ -2383,7 +2398,7 @@ func (w whatsmeowService) StartInstance(instanceId string) error {
 
 		instance.Proxy = string(proxyJSON)
 
-		err = w.instanceRepository.UpdateProxy(instance.Id, instance.Proxy)
+		err = w.instanceRepository.UpdateProxyContext(ctx, instance.Id, instance.Proxy)
 		if err != nil {
 			w.loggerWrapper.GetLogger(instanceId).LogError("[%s] Failed to update instance: %s", instanceId, err)
 			return err
@@ -2400,8 +2415,6 @@ func (w whatsmeowService) StartInstance(instanceId string) error {
 		"osName": instance.OsName,
 		"Proxy":  instance.Proxy,
 	}}
-
-	w.userInfoCache.Set(instance.Token, v, cache.NoExpiration)
 
 	eventArray := strings.Split(instance.Events, ",")
 
@@ -2421,8 +2434,6 @@ func (w whatsmeowService) StartInstance(instanceId string) error {
 
 		}
 	}
-
-	w.killChannel[instance.Id] = make(chan bool)
 
 	clientData := &ClientData{
 		Instance:      instance,
@@ -2444,6 +2455,11 @@ func (w whatsmeowService) StartInstance(instanceId string) error {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	w.userInfoCache.Set(instance.Token, v, cache.NoExpiration)
+	w.killChannel[instance.Id] = make(chan bool)
 	go w.StartClient(clientData)
 
 	return nil
@@ -2796,6 +2812,7 @@ func (w whatsmeowService) UpdateInstanceAdvancedSettings(instanceId string) erro
 }
 
 func (w whatsmeowService) ClearInstanceCache(instanceId string, token string) error {
+	w.queryClients.Delete(instanceId)
 	w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Clearing instance cache - Token: %s", instanceId, token)
 
 	// Limpar userInfoCache
@@ -2860,6 +2877,7 @@ func NewWhatsmeowService(
 		killChannel:        killChannel,
 		userInfoCache:      cache.New(5*time.Minute, 10*time.Minute),
 		clientPointer:      clientPointer,
+		queryClients:       newQueryClientIndex(clientPointer),
 		myClientPointer:    make(map[string]*MyClient),
 		rabbitmqProducer:   rabbitmqProducer,
 		webhookProducer:    webhookProducer,

@@ -1,6 +1,8 @@
 package instance_repository
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	instance_model "github.com/evolution-foundation/evolution-go/pkg/instance/model"
@@ -18,6 +20,7 @@ import (
 type InstanceRepository interface {
 	Create(instance instance_model.Instance) (*instance_model.Instance, error)
 	GetInstanceByID(instanceId string) (*instance_model.Instance, error)
+	GetInstanceByIDContext(ctx context.Context, instanceID string) (*instance_model.Instance, error)
 	GetConnectedInstanceByID(instanceId string) (*instance_model.Instance, error)
 	GetInstanceByToken(token string) (*instance_model.Instance, error)
 	GetInstanceByName(name string) (*instance_model.Instance, error)
@@ -25,6 +28,7 @@ type InstanceRepository interface {
 	UpdateConnected(userId string, status bool, disconnectReason string) error
 	UpdateQrcode(userId string, qr string) error
 	UpdateProxy(userId string, proxy string) error
+	UpdateProxyContext(ctx context.Context, instanceID string, proxy string) error
 	UpdateJid(userId string, jid string) error
 	GetAllConnectedInstances() ([]*instance_model.Instance, error)
 	GetAllConnectedInstancesByClientName(clientName string) ([]*instance_model.Instance, error)
@@ -68,14 +72,22 @@ func (i *instanceRepository) GetInstanceByName(name string) (*instance_model.Ins
 }
 
 func (i *instanceRepository) GetInstanceByID(instanceId string) (*instance_model.Instance, error) {
+	return i.GetInstanceByIDContext(context.Background(), instanceId)
+}
+
+// GetInstanceByIDContext loads an instance while respecting the caller's deadline.
+func (i *instanceRepository) GetInstanceByIDContext(ctx context.Context, instanceId string) (*instance_model.Instance, error) {
 	// Valida o formato do UUID
 	if _, err := uuid.Parse(instanceId); err != nil {
 		return nil, fmt.Errorf("invalid UUID format: %v", err)
 	}
 
 	var instance instance_model.Instance
-	err := i.db.Where("id = ?", instanceId).First(&instance).Error
+	err := i.db.WithContext(ctx).Where("id = ?", instanceId).First(&instance).Error
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, errors.Join(err, ctx.Err())
+		}
 		return nil, err
 	}
 
@@ -109,7 +121,16 @@ func (i *instanceRepository) UpdateQrcode(userId string, qr string) error {
 }
 
 func (i *instanceRepository) UpdateProxy(userId string, proxy string) error {
-	return i.db.Model(&instance_model.Instance{}).Where("id = ?", userId).Update("proxy", proxy).Error
+	return i.UpdateProxyContext(context.Background(), userId, proxy)
+}
+
+// UpdateProxyContext applies startup's proxy settings under the request deadline.
+func (i *instanceRepository) UpdateProxyContext(ctx context.Context, userId string, proxy string) error {
+	err := i.db.WithContext(ctx).Model(&instance_model.Instance{}).Where("id = ?", userId).Update("proxy", proxy).Error
+	if err != nil && ctx.Err() != nil {
+		return errors.Join(err, ctx.Err())
+	}
+	return err
 }
 
 func (i *instanceRepository) UpdateJid(userId string, jid string) error {
