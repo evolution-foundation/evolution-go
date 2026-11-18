@@ -1,6 +1,7 @@
 package newsletter_service
 
 import (
+	"github.com/evolution-foundation/evolution-go/pkg/safemap"
 	"context"
 	"errors"
 	"time"
@@ -22,7 +23,7 @@ type NewsletterService interface {
 }
 
 type newsletterService struct {
-	clientPointer    map[string]*whatsmeow.Client
+	clientPointer    *safemap.Map[*whatsmeow.Client]
 	whatsmeowService whatsmeow_service.WhatsmeowService
 	loggerWrapper    *logger_wrapper.LoggerManager
 }
@@ -47,7 +48,7 @@ type GetNewsletterMessagesStruct struct {
 }
 
 func (n *newsletterService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := n.clientPointer[instanceId]
+	client := n.clientPointer.Get(instanceId)
 	n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -61,7 +62,7 @@ func (n *newsletterService) ensureClientConnected(instanceId string) (*whatsmeow
 		n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = n.clientPointer[instanceId]
+		client = n.clientPointer.Get(instanceId)
 		n.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -195,7 +196,7 @@ func (n *newsletterService) GetNewsletterMessages(data *GetNewsletterMessagesStr
 }
 
 func NewNewsletterService(
-	clientPointer map[string]*whatsmeow.Client,
+	clientPointer *safemap.Map[*whatsmeow.Client],
 	whatsmeowService whatsmeow_service.WhatsmeowService,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) NewsletterService {

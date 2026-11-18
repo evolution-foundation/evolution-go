@@ -1,6 +1,7 @@
 package chat_service
 
 import (
+	"github.com/evolution-foundation/evolution-go/pkg/safemap"
 	"context"
 	"errors"
 	"time"
@@ -25,7 +26,7 @@ type ChatService interface {
 }
 
 type chatService struct {
-	clientPointer    map[string]*whatsmeow.Client
+	clientPointer    *safemap.Map[*whatsmeow.Client]
 	whatsmeowService whatsmeow_service.WhatsmeowService
 	loggerWrapper    *logger_wrapper.LoggerManager
 }
@@ -40,7 +41,7 @@ type HistorySyncRequestStruct struct {
 }
 
 func (c *chatService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
-	client := c.clientPointer[instanceId]
+	client := c.clientPointer.Get(instanceId)
 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -54,7 +55,7 @@ func (c *chatService) ensureClientConnected(instanceId string) (*whatsmeow.Clien
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
-		client = c.clientPointer[instanceId]
+		client = c.clientPointer.Get(instanceId)
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
@@ -244,7 +245,7 @@ func (c *chatService) HistorySyncRequest(data *HistorySyncRequestStruct, instanc
 }
 
 func NewChatService(
-	clientPointer map[string]*whatsmeow.Client,
+	clientPointer *safemap.Map[*whatsmeow.Client],
 	whatsmeowService whatsmeow_service.WhatsmeowService,
 	loggerWrapper *logger_wrapper.LoggerManager,
 ) ChatService {
