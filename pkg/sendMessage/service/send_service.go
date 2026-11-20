@@ -1856,81 +1856,65 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 	var msgType string
 
 	if hasReply && !hasOtherTypes && !hasPix {
-		// Reply-only: native ButtonsMessage wrapped in DocumentWithCaptionMessage (Baileys PR #36).
-		var replyButtons []*waE2E.ButtonsMessage_Button
-		for _, v := range data.Buttons {
-			replyButtons = append(replyButtons, &waE2E.ButtonsMessage_Button{
-				ButtonID: proto.String(v.Id),
-				ButtonText: &waE2E.ButtonsMessage_Button_ButtonText{
-					DisplayText: proto.String(v.DisplayText),
-				},
-				Type: waE2E.ButtonsMessage_Button_RESPONSE.Enum(),
-			})
+		// Reply-only: InteractiveMessage/NativeFlow quick_reply, no wrapper. The legacy ButtonsMessage returns 200 but
+		// is never delivered to regular accounts; whatsmeow (tulir/whatsmeow#1235) adds the <biz> node the server requires.
+		var header *waE2E.InteractiveMessage_Header
+		if t := strings.TrimSpace(strings.ReplaceAll(data.Title, "​", "")); t != "" {
+			header = &waE2E.InteractiveMessage_Header{Title: proto.String(data.Title), HasMediaAttachment: proto.Bool(false)}
 		}
-
-		buttonsMsg := &waE2E.ButtonsMessage{
-			ContentText: proto.String(data.Description),
-			FooterText:  proto.String(data.Footer),
-			HeaderType:  waE2E.ButtonsMessage_EMPTY.Enum(),
-			Buttons:     replyButtons,
-		}
-
-		// Optional media header (image or video URL).
-		if data.ImageUrl != "" {
-			if resp, err := http.Get(data.ImageUrl); err == nil {
-				fileData, readErr := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				if readErr == nil {
-					if uploaded, upErr := client.Upload(context.Background(), fileData, whatsmeow.MediaImage); upErr == nil {
-						buttonsMsg.HeaderType = waE2E.ButtonsMessage_IMAGE.Enum()
-						buttonsMsg.Header = &waE2E.ButtonsMessage_ImageMessage{
-							ImageMessage: &waE2E.ImageMessage{
-								URL:           proto.String(uploaded.URL),
-								DirectPath:    proto.String(uploaded.DirectPath),
-								MediaKey:      uploaded.MediaKey,
-								Mimetype:      proto.String("image/jpeg"),
-								FileEncSHA256: uploaded.FileEncSHA256,
-								FileSHA256:    uploaded.FileSHA256,
-								FileLength:    proto.Uint64(uint64(len(fileData))),
-							},
-						}
-					}
-				}
+		if data.ImageUrl != "" || data.VideoUrl != "" {
+			mediaURL, mediaType, mime := data.ImageUrl, whatsmeow.MediaImage, "image/jpeg"
+			if mediaURL == "" {
+				mediaURL, mediaType, mime = data.VideoUrl, whatsmeow.MediaVideo, "video/mp4"
 			}
-		} else if data.VideoUrl != "" {
-			if resp, err := http.Get(data.VideoUrl); err == nil {
+			if resp, err := http.Get(mediaURL); err == nil {
 				fileData, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if readErr == nil {
-					if uploaded, upErr := client.Upload(context.Background(), fileData, whatsmeow.MediaVideo); upErr == nil {
-						buttonsMsg.HeaderType = waE2E.ButtonsMessage_VIDEO.Enum()
-						buttonsMsg.Header = &waE2E.ButtonsMessage_VideoMessage{
-							VideoMessage: &waE2E.VideoMessage{
-								URL:           proto.String(uploaded.URL),
-								DirectPath:    proto.String(uploaded.DirectPath),
-								MediaKey:      uploaded.MediaKey,
-								Mimetype:      proto.String("video/mp4"),
-								FileEncSHA256: uploaded.FileEncSHA256,
-								FileSHA256:    uploaded.FileSHA256,
-								FileLength:    proto.Uint64(uint64(len(fileData))),
-							},
+					if uploaded, upErr := client.Upload(context.Background(), fileData, mediaType); upErr == nil {
+						if header == nil {
+							header = &waE2E.InteractiveMessage_Header{}
+						}
+						header.HasMediaAttachment = proto.Bool(true)
+						if mediaType == whatsmeow.MediaImage {
+							header.Media = &waE2E.InteractiveMessage_Header_ImageMessage{ImageMessage: &waE2E.ImageMessage{
+								URL: proto.String(uploaded.URL), DirectPath: proto.String(uploaded.DirectPath), MediaKey: uploaded.MediaKey,
+								Mimetype: proto.String(mime), FileEncSHA256: uploaded.FileEncSHA256, FileSHA256: uploaded.FileSHA256,
+								FileLength: proto.Uint64(uint64(len(fileData))),
+							}}
+						} else {
+							header.Media = &waE2E.InteractiveMessage_Header_VideoMessage{VideoMessage: &waE2E.VideoMessage{
+								URL: proto.String(uploaded.URL), DirectPath: proto.String(uploaded.DirectPath), MediaKey: uploaded.MediaKey,
+								Mimetype: proto.String(mime), FileEncSHA256: uploaded.FileEncSHA256, FileSHA256: uploaded.FileSHA256,
+								FileLength: proto.Uint64(uint64(len(fileData))),
+							}}
 						}
 					}
 				}
 			}
 		}
 
-		msg = &waE2E.Message{
-			DocumentWithCaptionMessage: &waE2E.FutureProofMessage{
-				Message: &waE2E.Message{
-					ButtonsMessage: buttonsMsg,
+		interactive := &waE2E.InteractiveMessage{
+			Header: header,
+			Body:   &waE2E.InteractiveMessage_Body{Text: proto.String(data.Description)},
+			InteractiveMessage: &waE2E.InteractiveMessage_NativeFlowMessage_{
+				NativeFlowMessage: &waE2E.InteractiveMessage_NativeFlowMessage{
+					Buttons:           buttons,
+					MessageParamsJSON: &messageParamsJSON,
+					MessageVersion:    proto.Int32(1),
 				},
 			},
+		}
+		if data.Footer != "" {
+			interactive.Footer = &waE2E.InteractiveMessage_Footer{Text: proto.String(data.Footer)}
+		}
+		msg = &waE2E.Message{
+			InteractiveMessage: interactive,
 			MessageContextInfo: &waE2E.MessageContextInfo{
 				MessageSecret: btnMsgSecret,
 			},
 		}
-		msgType = "ButtonsMessage"
+		msgType = "InteractiveMessage"
 	} else if hasPix {
 		// Pix: NativeFlowMessage wrapped in DocumentWithCaptionMessage.
 		paymentMsgParams := `{"native_flow_name":"order_details","version":1}`
@@ -2059,6 +2043,12 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 			Attrs: waBinary.Attrs{"biz_bot": "1"},
 		})
 	}
+	additionalNodes := &bizNodes
+	if hasReply && !hasOtherTypes && !hasPix {
+		// Unwrapped InteractiveMessage: whatsmeow already attaches the full <biz> node; a second <biz> here would make
+		// the server reject the message.
+		additionalNodes = nil
+	}
 
 	// Route through centralized SendMessage for ContextInfo, webhooks, quotes, mentions.
 	message, err := s.SendMessage(instance, msg, msgType, &SendDataStruct{
@@ -2068,7 +2058,7 @@ func (s *sendService) SendButton(data *ButtonStruct, instance *instance_model.In
 		MentionedJID:    data.MentionedJID,
 		FormatJid:       data.FormatJid,
 		Quoted:          data.Quoted,
-		AdditionalNodes: &bizNodes,
+		AdditionalNodes: additionalNodes,
 	})
 	if err != nil {
 		s.loggerWrapper.GetLogger(instance.Id).LogError("[%s] Error sending button message: %v", instance.Id, err)
@@ -2292,50 +2282,25 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 		Sections:    sections,
 	}
 
-	// Wrap ListMessage in DocumentWithCaptionMessage (Baileys PR #36) so modern WhatsApp renders it.
-	// MessageSecret (32 random bytes) is required for iOS rendering.
+	// Legacy ListMessage without wrapper (see #204): whatsmeow attaches <biz><list type="product_list" v="2"/>,
+	// the only format delivered to regular accounts. MessageSecret (32 random bytes) is required for iOS rendering.
 	listMsgSecret := make([]byte, 32)
 	_, _ = crypto_rand.Read(listMsgSecret)
 
 	msg := &waE2E.Message{
-		DocumentWithCaptionMessage: &waE2E.FutureProofMessage{
-			Message: &waE2E.Message{
-				ListMessage: listMessage,
-			},
-		},
+		ListMessage: listMessage,
 		MessageContextInfo: &waE2E.MessageContextInfo{
 			MessageSecret: listMsgSecret,
 		},
 	}
 
-	// Build biz <list> node — required for mobile rendering of modern lists.
-	listBizNodes := []waBinary.Node{
-		{
-			Tag: "biz",
-			Content: []waBinary.Node{{
-				Tag: "list",
-				Attrs: waBinary.Attrs{
-					"v":    "2",
-					"type": "single_select",
-				},
-			}},
-		},
-	}
-	if !strings.Contains(data.Number, "@g.us") {
-		listBizNodes = append(listBizNodes, waBinary.Node{
-			Tag:   "bot",
-			Attrs: waBinary.Attrs{"biz_bot": "1"},
-		})
-	}
-
 	message, err := s.SendMessage(instance, msg, "ListMessage", &SendDataStruct{
-		Number:          data.Number,
-		Delay:           data.Delay,
-		MentionAll:      data.MentionAll,
-		MentionedJID:    data.MentionedJID,
-		FormatJid:       data.FormatJid,
-		Quoted:          data.Quoted,
-		AdditionalNodes: &listBizNodes,
+		Number:       data.Number,
+		Delay:        data.Delay,
+		MentionAll:   data.MentionAll,
+		MentionedJID: data.MentionedJID,
+		FormatJid:    data.FormatJid,
+		Quoted:       data.Quoted,
 	})
 
 	if err != nil {
