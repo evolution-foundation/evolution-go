@@ -30,6 +30,7 @@ type UserService interface {
 	SetProfilePicture(data *SetProfilePictureStruct, instance *instance_model.Instance) (bool, error)
 	SetProfileName(data *SetProfileNameStruct, instance *instance_model.Instance) (bool, error)
 	SetProfileStatus(data *SetProfileStatusStruct, instance *instance_model.Instance) (bool, error)
+	ResolveLid(data *ResolveLidStruct, instance *instance_model.Instance) (*ResolveLidResult, error)
 }
 
 type userService struct {
@@ -96,6 +97,17 @@ type SetProfileNameStruct struct {
 
 type SetProfileStatusStruct struct {
 	Status string `json:"status"`
+}
+
+type ResolveLidStruct struct {
+	Lid      string `json:"lid"`
+	GroupJid string `json:"groupJid,omitempty"`
+}
+
+type ResolveLidResult struct {
+	Lid         string `json:"lid"`
+	PhoneNumber string `json:"phoneNumber"`
+	JID         string `json:"jid"`
 }
 
 type PrivacyStruct struct {
@@ -313,6 +325,62 @@ func (u *userService) mergeCheckUserResults(original, retry *CheckUserCollection
 	}
 
 	return merged
+}
+
+// ResolveLid resolves the phone number mapped to a LID (Linked Identity, "xxxx@lid").
+// This only reads whatsmeow's local LID store: the WhatsApp protocol has no
+// server query for LID->PN (only the inverse, PN->LID, is supported). The
+// mapping is only known locally after it has been received passively (e.g.
+// a message from that LID, or a group with LID-based participants). As a
+// best-effort fallback, when a groupJid is provided and the mapping is
+// missing, a fresh GetGroupInfo on that group can populate it, since group
+// participant lists include the phone number for LID participants.
+func (u *userService) ResolveLid(data *ResolveLidStruct, instance *instance_model.Instance) (*ResolveLidResult, error) {
+	client, err := u.ensureClientConnected(instance.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	lidJID, ok := utils.ParseJID(data.Lid)
+	if !ok || lidJID.Server != types.HiddenUserServer {
+		return nil, errors.New("invalid lid")
+	}
+
+	if client.Store.LIDs == nil {
+		return nil, errors.New("lid store unavailable")
+	}
+
+	ctx := context.Background()
+
+	pn, err := client.Store.LIDs.GetPNForLID(ctx, lidJID)
+	if err != nil {
+		return nil, err
+	}
+
+	if pn.IsEmpty() && data.GroupJid != "" {
+		groupJID, ok := utils.ParseJID(data.GroupJid)
+		if !ok || groupJID.Server != types.GroupServer {
+			return nil, errors.New("invalid groupJid")
+		}
+
+		u.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] No cached phone number for lid %s, refreshing group %s as fallback", instance.Id, lidJID, groupJID)
+
+		if _, groupErr := client.GetGroupInfo(ctx, groupJID); groupErr != nil {
+			u.loggerWrapper.GetLogger(instance.Id).LogWarn("[%s] Failed to refresh group %s for lid fallback: %v", instance.Id, groupJID, groupErr)
+		} else if pn, err = client.Store.LIDs.GetPNForLID(ctx, lidJID); err != nil {
+			return nil, err
+		}
+	}
+
+	if pn.IsEmpty() {
+		return nil, errors.New("no phone number mapping found for this lid")
+	}
+
+	return &ResolveLidResult{
+		Lid:         lidJID.String(),
+		PhoneNumber: pn.User,
+		JID:         pn.String(),
+	}, nil
 }
 
 func (u *userService) GetAvatar(data *GetAvatarStruct, instance *instance_model.Instance) (*types.ProfilePictureInfo, error) {
