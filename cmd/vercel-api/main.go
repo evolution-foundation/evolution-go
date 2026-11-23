@@ -196,6 +196,9 @@ func allowMethod(m string)bool{
 func allowPath(p string)bool{
     // Explicitly omit /manager, /ws, /assets, /passkey and all license routes.
     if p=="/server/ok" { return true }
+    // Upstream license activation routes stay behind X-Bridge-Key.
+    // Use the original GLOBAL_API_KEY in apikey on these requests.
+    if p=="/license/status" || p=="/license/register" || p=="/license/activate" { return true }
     for _,prefix:=range []string{
         "/instance/","/send/","/message/","/group/","/chat/","/user/",
         "/community/","/label/","/unlabel/","/newsletter/","/call/","/polls/",
