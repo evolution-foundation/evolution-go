@@ -1,0 +1,19 @@
+# Added by WorkiDigital: always-on Evolution Go engine, with PostgreSQL command consumer.
+FROM golang:1.26.10-alpine AS build
+RUN apk add --no-cache git build-base libjpeg-turbo-dev libwebp-dev
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 go build -trimpath -o /out/evolution-go ./cmd/evolution-go
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata ffmpeg libjpeg-turbo libwebp poppler-utils
+WORKDIR /app
+COPY --from=build /out/evolution-go /app/evolution-go
+COPY --from=build /build/manager/dist /app/manager/dist
+COPY --from=build /build/VERSION /app/VERSION
+ENV EVO_VERCEL_DAEMON=1
+ENV SERVER_PORT=8080
+EXPOSE 8080
+ENTRYPOINT ["/app/evolution-go"]
