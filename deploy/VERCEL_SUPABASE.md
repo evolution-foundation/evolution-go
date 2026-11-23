@@ -39,6 +39,28 @@ Requests already marked `processing` are **never automatically replayed** after 
 - Check connection pool limits, per-region latency, memory, monitoring, billing, migrations and task deadlines with real instances.
 - Limit Vercel daemon instances to one until instance partitioning/leader election is proven.
 
+
+## License activation without a public Manager
+
+The original `/license/status`, `/license/register` and `/license/activate` routes are passed through the secured JSON bridge. They are **not license bypasses**. The operator must complete the Evolution Foundation's real registration and activation flow. Provide `GLOBAL_API_KEY` as `apikey` and the gateway secret as `X-Bridge-Key`.
+
+1. Call `GET /license/status` through the public gateway; allow the asynchronous job to finish if it returns HTTP 202.
+2. Call `GET /license/register` with an appropriate public `redirect_uri` and open the returned registration URL in a browser to complete licensing.
+3. If the redirect contains an authorization code, finish activation by calling `GET /license/activate?code=...` with the same authentication headers.
+4. Recheck `GET /license/status` before creating a WhatsApp instance. The upstream license and its heartbeat remain unchanged.
+
+For operators already registered with the Foundation, setting `EVOLUTION_OPERATOR_EMAIL` can enable upstream headless auto-activation on boot. It is not a shortcut for first-time registration. Make sure any redirect callback you choose can return the code to the operator without exposing it publicly.
+
+## Example API call
+
+```bash
+curl -sS "$API_URL/license/status" \
+  -H "X-Bridge-Key: $BRIDGE_API_KEY" \
+  -H "apikey: $GLOBAL_API_KEY"
+```
+
+For instance endpoints replace `GLOBAL_API_KEY` in the `apikey` header with the token of that instance. The `X-Bridge-Key` header still stays the same. Do not publish either key in the browser.
+
 ## Security and rollout notes
 
 - The service now uses two layers of authentication: a bridge secret and the original per-instance API key. The per-instance key is AES-GCM encrypted in the private queue.
