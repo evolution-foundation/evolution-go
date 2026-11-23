@@ -503,6 +503,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	client.EnableAutoReconnect = false
 	client.AutoTrustIdentity = true
+	// Re-request messages that fail to decrypt from the phone instead of dropping them.
+	client.AutomaticMessageRerequestFromPhone = w.config.RerequestFromPhone
 
 	mycli := &MyClient{
 		service:            &w,

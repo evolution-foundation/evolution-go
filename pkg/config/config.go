@@ -33,6 +33,7 @@ type Config struct {
 	LogType              string
 	WebhookFiles         bool
 	ConnectOnStartup     bool
+	RerequestFromPhone   bool
 	OsName               string
 	AmqpUrl              string
 	AmqpGlobalEnabled    bool
@@ -283,6 +284,8 @@ func Load() *Config {
 		checkUserExists = "true"
 	}
 
+	rerequestFromPhone := os.Getenv(config_env.REREQUEST_FROM_PHONE)
+
 	// Convertendo para int com valores padrão caso estejam vazios
 	major := 0
 	if whatsappVersionMajor != "" {
@@ -378,6 +381,7 @@ func Load() *Config {
 		EventIgnoreStatus:    eventIgnoreStatus == "true",
 		QrcodeMaxCount:       qrMaxCount,
 		CheckUserExists:      checkUserExists != "false", // Default true, set to false to disable
+		RerequestFromPhone:   rerequestFromPhone == "true",
 		AmqpGlobalEvents:     amqpGlobalEvents,
 		AmqpSpecificEvents:   amqpSpecificEvents,
 		NatsUrl:              natsUrl,
