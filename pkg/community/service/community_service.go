@@ -36,7 +36,9 @@ type AddParticipantStruct struct {
 }
 
 func (c *communityService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := c.clientPointer[instanceId]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 	c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -50,7 +52,9 @@ func (c *communityService) ensureClientConnected(instanceId string) (*whatsmeow.
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = c.clientPointer[instanceId]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		c.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,

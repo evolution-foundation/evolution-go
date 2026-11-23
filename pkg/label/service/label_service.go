@@ -50,7 +50,9 @@ type EditLabelStruct struct {
 }
 
 func (l *labelService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := l.clientPointer[instanceId]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 	l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -64,7 +66,9 @@ func (l *labelService) ensureClientConnected(instanceId string) (*whatsmeow.Clie
 		l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = l.clientPointer[instanceId]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		l.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,

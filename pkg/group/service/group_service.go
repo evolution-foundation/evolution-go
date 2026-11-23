@@ -117,7 +117,9 @@ type UpdateGroupRequestParticipantsStruct struct {
 }
 
 func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Client, error) {
+	whatsmeow_service.ClientMapsMu.RLock()
 	client := g.clientPointer[instanceId]
+	whatsmeow_service.ClientMapsMu.RUnlock()
 	g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking client connection status - Client exists: %v", instanceId, client != nil)
 
 	if client == nil {
@@ -131,7 +133,9 @@ func (g *groupService) ensureClientConnected(instanceId string) (*whatsmeow.Clie
 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Instance started, waiting 2 seconds...", instanceId)
 		time.Sleep(2 * time.Second)
 
+		whatsmeow_service.ClientMapsMu.RLock()
 		client = g.clientPointer[instanceId]
+		whatsmeow_service.ClientMapsMu.RUnlock()
 		g.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Checking new client - Exists: %v, Connected: %v",
 			instanceId,
 			client != nil,
