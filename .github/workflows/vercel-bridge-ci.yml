@@ -25,8 +25,12 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Test gateway and bridge
-        run: go test ./cmd/vercel-api ./pkg/vercelbridge
+        run: go test ./cmd/vercel-api ./pkg/vercelbridge ./pkg/storage/supabase
       - name: Build original Evolution Go daemon
         run: go build -o /tmp/evolution-go ./cmd/evolution-go
+      - name: Build Vercel gateway image
+        run: docker build -f Dockerfile.vercel-api -t evolution-go-vercel-api .
+      - name: Build Vercel daemon image
+        run: docker build -f Dockerfile.vercel-daemon -t evolution-go-vercel-daemon .
       - name: Validate Vercel JSON config syntax
         run: python3 -m json.tool vercel.json > /dev/null
