@@ -117,6 +117,7 @@ type MediaStruct struct {
 	FormatJid       *bool        `json:"formatJid,omitempty"`
 	Quoted          QuotedStruct `json:"quoted"`
 	ForwardingScore *uint32      `json:"forwardingScore,omitempty"`
+	ViewOnce        bool         `json:"viewOnce"`
 }
 
 type PollStruct struct {
@@ -1186,6 +1187,24 @@ func (s *sendService) sendMediaFileWithRetry(data *MediaStruct, fileData []byte,
 			return nil, errors.New("invalid media type")
 		}
 
+		// view-once: when requested, flag the media so it disappears after the recipient opens it
+		// once (image, video and voice/PTV support it; documents do not). Additive — without the
+		// flag the media is a normal message, exactly as before.
+		if data.ViewOnce {
+			if media.ImageMessage != nil {
+				media.ImageMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.VideoMessage != nil {
+				media.VideoMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.AudioMessage != nil {
+				media.AudioMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.PtvMessage != nil {
+				media.PtvMessage.ViewOnce = proto.Bool(true)
+			}
+		}
+
 		message, err := s.SendMessage(instance, media, mediaType, &SendDataStruct{
 			Id:              data.Id,
 			Number:          data.Number,
@@ -1488,6 +1507,24 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 			mediaType = "DocumentMessage"
 		default:
 			return nil, errors.New("invalid media type")
+		}
+
+		// view-once: when requested, flag the media so it disappears after the recipient opens it
+		// once (image, video and voice/PTV support it; documents do not). Additive — without the
+		// flag the media is a normal message, exactly as before.
+		if data.ViewOnce {
+			if media.ImageMessage != nil {
+				media.ImageMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.VideoMessage != nil {
+				media.VideoMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.AudioMessage != nil {
+				media.AudioMessage.ViewOnce = proto.Bool(true)
+			}
+			if media.PtvMessage != nil {
+				media.PtvMessage.ViewOnce = proto.Bool(true)
+			}
 		}
 
 		messageStart := time.Now()
