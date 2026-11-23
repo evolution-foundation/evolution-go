@@ -1601,40 +1601,90 @@ func convertToWebP(imageData string) ([]byte, error) {
 	return webpBuffer.Bytes(), nil
 }
 
+// convertBytesToWebP re-encodes a STATIC image (jpeg/png/...) already in memory into WebP. Never
+// call with data that is already WebP — the decoder fails on animated WebP ("webpDecodeRGBA: failed")
+// and would flatten a static WebP to a single frame anyway.
+func convertBytesToWebP(data []byte) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %v", err)
+	}
+	var webpBuffer bytes.Buffer
+	if err := webp.Encode(&webpBuffer, img, &webp.Options{Lossless: false, Quality: 80}); err != nil {
+		return nil, fmt.Errorf("failed to encode image to WebP: %v", err)
+	}
+	return webpBuffer.Bytes(), nil
+}
+
+// isWebP checks the RIFF/WEBP magic bytes.
+func isWebP(data []byte) bool {
+	return len(data) >= 12 && string(data[0:4]) == "RIFF" && string(data[8:12]) == "WEBP"
+}
+
+// isAnimatedWebP: an animated WebP carries a VP8X chunk (right after the 12-byte RIFF header) with
+// the Animation flag (bit 0x02) set; the ANIM chunk scan is a belt-and-suspenders fallback.
+func isAnimatedWebP(data []byte) bool {
+	if !isWebP(data) {
+		return false
+	}
+	if len(data) >= 21 && string(data[12:16]) == "VP8X" && data[20]&0x02 != 0 {
+		return true
+	}
+	return bytes.Contains(data, []byte("ANIM"))
+}
+
 func (s *sendService) SendSticker(data *StickerStruct, instance *instance_model.Instance) (*MessageSendStruct, error) {
 	client, err := s.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	var uploaded whatsmeow.UploadResponse
-	var filedata []byte
-
-	if strings.HasPrefix(data.Sticker, "http") {
-		webpData, err := convertToWebP(data.Sticker)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert image to WebP: %v", err)
-		}
-
-		filedata = webpData
-
-		uploaded, err = client.Upload(context.Background(), filedata, whatsmeow.MediaImage)
-		if err != nil {
-			return nil, fmt.Errorf("failed to upload sticker: %v", err)
-		}
-	} else {
+	if !strings.HasPrefix(data.Sticker, "http") {
 		return nil, fmt.Errorf("invalid sticker URL")
 	}
 
-	msg := &waE2E.Message{StickerMessage: &waE2E.StickerMessage{
+	resp, err := http.Get(data.Sticker)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch sticker from URL: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read sticker data: %v", err)
+	}
+
+	// Stickers on WhatsApp are already WebP: upload UNTOUCHED (re-encoding both fails on animated
+	// WebP and would flatten it to one frame). Only convert when the source is some other format.
+	var filedata []byte
+	isAnimated := false
+	if isWebP(raw) {
+		filedata = raw
+		isAnimated = isAnimatedWebP(raw)
+	} else {
+		filedata, err = convertBytesToWebP(raw)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert image to WebP: %v", err)
+		}
+	}
+
+	uploaded, err := client.Upload(context.Background(), filedata, whatsmeow.MediaImage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload sticker: %v", err)
+	}
+
+	stickerMsg := &waE2E.StickerMessage{
 		URL:           proto.String(uploaded.URL),
 		DirectPath:    proto.String(uploaded.DirectPath),
 		MediaKey:      uploaded.MediaKey,
-		Mimetype:      proto.String(http.DetectContentType(filedata)),
+		Mimetype:      proto.String("image/webp"), // output is always webp now
 		FileEncSHA256: uploaded.FileEncSHA256,
 		FileSHA256:    uploaded.FileSHA256,
 		FileLength:    proto.Uint64(uint64(len(filedata))),
-	}}
+	}
+	if isAnimated {
+		stickerMsg.IsAnimated = proto.Bool(true)
+	}
+	msg := &waE2E.Message{StickerMessage: stickerMsg}
 
 	message, err := s.SendMessage(instance, msg, "StickerMessage", &SendDataStruct{
 		Id:           data.Id,
