@@ -60,9 +60,11 @@ import (
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
 	storage_interfaces "github.com/evolution-foundation/evolution-go/pkg/storage/interfaces"
 	minio_storage "github.com/evolution-foundation/evolution-go/pkg/storage/minio"
+	supabase_storage "github.com/evolution-foundation/evolution-go/pkg/storage/supabase"
 	user_handler "github.com/evolution-foundation/evolution-go/pkg/user/handler"
 	user_service "github.com/evolution-foundation/evolution-go/pkg/user/service"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
+	vercelbridge "github.com/evolution-foundation/evolution-go/pkg/vercelbridge"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -144,7 +146,15 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 
 	var mediaStorage storage_interfaces.MediaStorage
 	var err error
-	if config.MinioEnabled {
+	if os.Getenv("SUPABASE_URL") != "" {
+		if config.MinioEnabled { log.Fatal("enable either Supabase Storage or MinIO, not both") }
+		mediaStorage, err = supabase_storage.New(
+			os.Getenv("SUPABASE_URL"),
+			os.Getenv("SUPABASE_SERVICE_ROLE_KEY"),
+			os.Getenv("SUPABASE_STORAGE_BUCKET"),
+		)
+		if err != nil { log.Fatal(err) }
+	} else if config.MinioEnabled {
 		mediaStorage, err = minio_storage.NewMinioMediaStorage(
 			config.MinioEndpoint,
 			config.MinioAccessKey,
@@ -201,6 +211,14 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	pollHandler := poll_handler.NewPollHandler(whatsmeowService.GetPollService(), loggerWrapper)
 
 	r := gin.Default()
+	// WorkiDigital: daemon-only loopback liveness endpoint for Vercel.
+	// It is registered before the original license gate and protected by
+	// a 127.0.0.1-only listener when EVO_VERCEL_DAEMON is set.
+	if os.Getenv("EVO_VERCEL_DAEMON") == "1" {
+		r.GET("/_bridge/health", func(ctx *gin.Context) {
+			ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+	}
 
 	// CORS middleware — must be before everything else
 	r.Use(func(c *gin.Context) {
@@ -339,6 +357,11 @@ func main() {
 	}
 
 	cfg := config.Load()
+	// WorkiDigital: only the Vercel Daemon owns WhatsApp sessions.
+	daemonMode := os.Getenv("EVO_VERCEL_DAEMON") == "1"
+	if daemonMode && (cfg.PostgresAuthDB == "" || os.Getenv("POSTGRES_USERS_DB") == "") {
+		log.Fatal("[vercelbridge] both PostgreSQL DSNs are required in Daemon mode (no ephemeral SQLite)")
+	}
 
 	logger.LogInfo("Starting Evolution GO version %s", version)
 
@@ -347,6 +370,23 @@ func main() {
 	db, err := cfg.CreateUsersDB()
 	if err != nil {
 		log.Fatal(err)
+	}
+	if daemonMode {
+		if err := vercelbridge.ValidateTokenKey(os.Getenv("BRIDGE_TOKEN_KEY")); err != nil { log.Fatal(err) }
+		// Session-level lock: protects against overlapping Daemon deployments.
+		sqlDB, err := db.DB()
+		if err != nil { log.Fatal(err) }
+		singletonCtx, singletonCancel := context.WithCancel(context.Background())
+		defer singletonCancel()
+		lock, err := vercelbridge.AcquireSingleton(singletonCtx, sqlDB)
+		if err != nil { log.Fatalf("[vercelbridge] refusing to start duplicate WhatsApp engine: %v", err) }
+		defer lock.Close()
+		go func() {
+			if err := vercelbridge.MonitorSingleton(singletonCtx, lock); err != nil {
+				log.Printf("[vercelbridge] FATAL: %v; terminating daemon", err)
+				_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+			}
+		}()
 	}
 
 	// Inicializar PostgreSQL AUTH
@@ -412,9 +452,17 @@ func main() {
 	defer heartbeatCancel()
 
 	core.StartHeartbeat(heartbeatCtx, runtimeCtx, startTime)
+	if daemonMode {
+		// Worker dispatches queued requests through the authenticated Gin router.
+		sqlDB, err := db.DB()
+		if err != nil { log.Fatal(err) }
+		go vercelbridge.RunWorker(heartbeatCtx, sqlDB, r, os.Getenv("BRIDGE_TOKEN_KEY"))
+	}
 
+	listenAddr := ":" + os.Getenv("SERVER_PORT")
+	if daemonMode { listenAddr = "127.0.0.1:" + os.Getenv("SERVER_PORT") }
 	srv := &http.Server{
-		Addr:    ":" + os.Getenv("SERVER_PORT"),
+		Addr:    listenAddr,
 		Handler: r,
 	}
 

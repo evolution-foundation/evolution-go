@@ -1,0 +1,14 @@
+# Added by WorkiDigital: stateless HTTP command gateway; no WhatsApp session in this container.
+FROM golang:1.26.10-alpine AS build
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/vercel-api ./cmd/vercel-api
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=build /out/vercel-api /usr/local/bin/vercel-api
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/vercel-api"]

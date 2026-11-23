@@ -1,0 +1,36 @@
+name: Vercel Supabase Bridge CI
+on:
+  push:
+    branches:
+      - feat/vercel-supabase-daemon
+  pull_request:
+    paths:
+      - 'cmd/vercel-api/**'
+      - 'pkg/vercelbridge/**'
+      - 'cmd/evolution-go/main.go'
+      - 'Dockerfile.vercel-*'
+      - 'vercel.json'
+      - 'deploy/**'
+jobs:
+  go-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test gateway and bridge
+        run: go test ./cmd/vercel-api ./pkg/vercelbridge ./pkg/storage/supabase
+      - name: Build original Evolution Go daemon
+        run: go build -o /tmp/evolution-go ./cmd/evolution-go
+      - name: Build Vercel gateway image
+        run: docker build -f Dockerfile.vercel-api -t evolution-go-vercel-api .
+      - name: Build Vercel daemon image
+        run: docker build -f Dockerfile.vercel-daemon -t evolution-go-vercel-daemon .
+      - name: Validate Vercel JSON config syntax
+        run: python3 -m json.tool vercel.json > /dev/null
