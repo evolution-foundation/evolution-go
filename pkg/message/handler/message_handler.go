@@ -11,6 +11,7 @@ import (
 type MessageHandler interface {
 	React(ctx *gin.Context)
 	ChatPresence(ctx *gin.Context)
+	SubscribePresence(ctx *gin.Context)
 	MarkRead(ctx *gin.Context)
 	MarkPlayed(ctx *gin.Context)
 	DownloadMedia(ctx *gin.Context)
@@ -117,6 +118,46 @@ func (m *messageHandler) ChatPresence(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "success", "data": responseData})
+}
+
+// SubscribePresence subscribe to a contact's presence (online / last-seen)
+// @Summary Subscribe to a contact's presence
+// @Description Subscribe to a contact's presence so the instance starts receiving Presence (online/offline/last-seen) webhook events for that number
+// @Tags Message
+// @Accept json
+// @Produce json
+// @Param message body message_service.SubscribePresenceStruct true "Number to subscribe presence for"
+// @Success 200 {object} gin.H "success"
+// @Failure 400 {object} gin.H "Error on validation"
+// @Failure 500 {object} gin.H "Internal server error"
+// @Router /message/subscribe [post]
+func (m *messageHandler) SubscribePresence(ctx *gin.Context) {
+	getInstance := ctx.MustGet("instance")
+
+	instance, ok := getInstance.(*instance_model.Instance)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
+		return
+	}
+
+	var data *message_service.SubscribePresenceStruct
+	err := ctx.ShouldBindBodyWithJSON(&data)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if data.Number == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "phone number is required"})
+		return
+	}
+
+	if err := m.messageService.SubscribePresence(data, instance); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "success"})
 }
 
 // MarkRead mark a message as read

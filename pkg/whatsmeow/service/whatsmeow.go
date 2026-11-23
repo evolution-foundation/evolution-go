@@ -1841,12 +1841,15 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	case *events.Presence:
 		doWebhook = true
 		postMap["event"] = "Presence"
+		// Explicit top-level fields so consumers don't depend on types.JID/time marshaling.
+		postMap["from"] = evt.From.String()
 
 		if evt.Unavailable {
 			postMap["state"] = "offline"
 			if evt.LastSeen.IsZero() {
 				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] User is now offline", mycli.userID)
 			} else {
+				postMap["lastSeen"] = evt.LastSeen.Unix()
 				mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] User is now offline since %s", mycli.userID, evt.LastSeen.Format("2006-01-02 15:04:05"))
 			}
 		} else {
