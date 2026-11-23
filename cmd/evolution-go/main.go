@@ -60,6 +60,7 @@ import (
 	server_handler "github.com/evolution-foundation/evolution-go/pkg/server/handler"
 	storage_interfaces "github.com/evolution-foundation/evolution-go/pkg/storage/interfaces"
 	minio_storage "github.com/evolution-foundation/evolution-go/pkg/storage/minio"
+	supabase_storage "github.com/evolution-foundation/evolution-go/pkg/storage/supabase"
 	user_handler "github.com/evolution-foundation/evolution-go/pkg/user/handler"
 	user_service "github.com/evolution-foundation/evolution-go/pkg/user/service"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
@@ -145,7 +146,15 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 
 	var mediaStorage storage_interfaces.MediaStorage
 	var err error
-	if config.MinioEnabled {
+	if os.Getenv("SUPABASE_URL") != "" {
+		if config.MinioEnabled { log.Fatal("enable either Supabase Storage or MinIO, not both") }
+		mediaStorage, err = supabase_storage.New(
+			os.Getenv("SUPABASE_URL"),
+			os.Getenv("SUPABASE_SERVICE_ROLE_KEY"),
+			os.Getenv("SUPABASE_STORAGE_BUCKET"),
+		)
+		if err != nil { log.Fatal(err) }
+	} else if config.MinioEnabled {
 		mediaStorage, err = minio_storage.NewMinioMediaStorage(
 			config.MinioEndpoint,
 			config.MinioAccessKey,
