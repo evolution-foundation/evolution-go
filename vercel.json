@@ -16,6 +16,12 @@
       "entrypoint": "Dockerfile.vercel-daemon",
       "instances": { "iad1": 1 },
       "resources": { "requests": { "memory": "2Gi" } },
+      "livenessProbe": {
+        "httpGet": { "port": 8080, "path": "/_bridge/health" },
+        "initialDelaySeconds": 30,
+        "periodSeconds": 15,
+        "timeoutSeconds": 3
+      },
       "terminationGracePeriodSeconds": 60
     }
   }
