@@ -63,6 +63,7 @@ import (
 	user_handler "github.com/evolution-foundation/evolution-go/pkg/user/handler"
 	user_service "github.com/evolution-foundation/evolution-go/pkg/user/service"
 	whatsmeow_service "github.com/evolution-foundation/evolution-go/pkg/whatsmeow/service"
+	vercelbridge "github.com/evolution-foundation/evolution-go/pkg/vercelbridge"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -339,6 +340,11 @@ func main() {
 	}
 
 	cfg := config.Load()
+	// WorkiDigital: only the Vercel Daemon owns WhatsApp sessions.
+	daemonMode := os.Getenv("EVO_VERCEL_DAEMON") == "1"
+	if daemonMode && (cfg.PostgresAuthDB == "" || os.Getenv("POSTGRES_USERS_DB") == "") {
+		log.Fatal("[vercelbridge] both PostgreSQL DSNs are required in Daemon mode (no ephemeral SQLite)")
+	}
 
 	logger.LogInfo("Starting Evolution GO version %s", version)
 
@@ -347,6 +353,22 @@ func main() {
 	db, err := cfg.CreateUsersDB()
 	if err != nil {
 		log.Fatal(err)
+	}
+	if daemonMode {
+		// Session-level lock: protects against overlapping Daemon deployments.
+		sqlDB, err := db.DB()
+		if err != nil { log.Fatal(err) }
+		singletonCtx, singletonCancel := context.WithCancel(context.Background())
+		defer singletonCancel()
+		lock, err := vercelbridge.AcquireSingleton(singletonCtx, sqlDB)
+		if err != nil { log.Fatalf("[vercelbridge] refusing to start duplicate WhatsApp engine: %v", err) }
+		defer lock.Close()
+		go func() {
+			if err := vercelbridge.MonitorSingleton(singletonCtx, lock); err != nil {
+				log.Printf("[vercelbridge] FATAL: %v; terminating daemon", err)
+				_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+			}
+		}()
 	}
 
 	// Inicializar PostgreSQL AUTH
@@ -412,9 +434,17 @@ func main() {
 	defer heartbeatCancel()
 
 	core.StartHeartbeat(heartbeatCtx, runtimeCtx, startTime)
+	if daemonMode {
+		// Worker dispatches queued requests through the authenticated Gin router.
+		sqlDB, err := db.DB()
+		if err != nil { log.Fatal(err) }
+		go vercelbridge.RunWorker(heartbeatCtx, sqlDB, r, cfg.GlobalApiKey)
+	}
 
+	listenAddr := ":" + os.Getenv("SERVER_PORT")
+	if daemonMode { listenAddr = "127.0.0.1:" + os.Getenv("SERVER_PORT") }
 	srv := &http.Server{
-		Addr:    ":" + os.Getenv("SERVER_PORT"),
+		Addr:    listenAddr,
 		Handler: r,
 	}
 
