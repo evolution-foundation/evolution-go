@@ -26,4 +26,9 @@ CREATE TABLE IF NOT EXISTS evo_bridge.commands (
 CREATE INDEX IF NOT EXISTS evo_bridge_commands_queue_idx
  ON evo_bridge.commands (created_at) WHERE state = 'queued';
 REVOKE ALL ON ALL TABLES IN SCHEMA evo_bridge FROM PUBLIC, anon, authenticated;
+
+-- Store WhatsApp media only in a private bucket.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('evolution-media','evolution-media',false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 COMMIT;
