@@ -22,13 +22,14 @@ type command struct {
     Method string
     Path string
     Body []byte
+    EncryptedKey []byte
 }
 
 // RunWorker must run only in the continuously running Evolution Go daemon.
 // Commands claimed as processing are intentionally not replayed automatically
 // after crashes, because WhatsApp sends and group mutations are not idempotent.
-func RunWorker(ctx context.Context, db *sql.DB, router http.Handler, apiKey string) {
-    if db == nil || router == nil || apiKey == "" {
+func RunWorker(ctx context.Context, db *sql.DB, router http.Handler, tokenKeyHex string) {
+    if db == nil || router == nil || ValidateTokenKey(tokenKeyHex) != nil {
         log.Printf("[vercelbridge] worker not started: missing db, router or API key")
         return
     }
@@ -45,7 +46,7 @@ func RunWorker(ctx context.Context, db *sql.DB, router http.Handler, apiKey stri
             pause(ctx, 3*time.Second)
             continue
         }
-        process(ctx, db, router, apiKey, c)
+        process(ctx, db, router, tokenKeyHex, c)
     }
     log.Printf("[vercelbridge] command worker stopped")
 }
@@ -63,12 +64,18 @@ UPDATE evo_bridge.commands AS c
 SET state='processing', started_at=now()
 FROM next
 WHERE c.id = next.id
-RETURNING c.id::text, c.method, c.request_path, c.request_body
-`).Scan(&c.ID, &c.Method, &c.Path, &c.Body)
+RETURNING c.id::text, c.method, c.request_path, c.request_body, c.auth_ciphertext
+`).Scan(&c.ID, &c.Method, &c.Path, &c.Body, &c.EncryptedKey)
     return c, err
 }
 
-func process(ctx context.Context, db *sql.DB, router http.Handler, apiKey string, c command) {
+func process(ctx context.Context, db *sql.DB, router http.Handler, tokenKeyHex string, c command) {
+    apiKey, decryptErr := OpenAPIKey(c.EncryptedKey, tokenKeyHex)
+    if decryptErr != nil {
+        log.Printf("[vercelbridge] failed to decrypt credentials for command %s: %v", c.ID, decryptErr)
+        finish(ctx, db, c.ID, http.StatusInternalServerError, []byte("bridge credential error"), "text/plain")
+        return
+    }
     // The handler is the existing authenticated Gin router in this process.
     // No inbound traffic to the daemon and no external HTTP proxy target.
     runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
