@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS evo_bridge.commands (
     request_path text NOT NULL,
     request_body bytea NOT NULL DEFAULT '\x'::bytea,
     request_sha256 text NOT NULL,
+    auth_ciphertext bytea NOT NULL,
     state text NOT NULL DEFAULT 'queued'
       CHECK (state IN ('queued','processing','finished')),
     response_code integer,
