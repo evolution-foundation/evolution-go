@@ -40,6 +40,10 @@ Requests already marked `processing` are **never automatically replayed** after 
 - Limit Vercel daemon instances to one until instance partitioning/leader election is proven.
 
 
+## Vercel plan and 24/7 uptime
+
+Vercel Daemons is in public beta and runs only in production. On Hobby, Vercel limits provisioned memory to 420 GB-hours per month across the team. A single 2 GiB daemon uses this allowance in roughly 9 days of uninterrupted operation; after hitting the quota it stops until the quota resets or the plan is upgraded. **For 24/7 WhatsApp connectivity choose a Vercel Pro or eligible Enterprise team**, review costs and apply alerts/usage budgets. The current Vercel team plan could not be confirmed from connector metadata.
+
 ## License activation without a public Manager
 
 The original `/license/status`, `/license/register` and `/license/activate` routes are passed through the secured JSON bridge. They are **not license bypasses**. The operator must complete the Evolution Foundation's real registration and activation flow. Provide `GLOBAL_API_KEY` as `apikey` and the gateway secret as `X-Bridge-Key`.
