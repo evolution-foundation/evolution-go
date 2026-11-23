@@ -13,6 +13,7 @@ type UserHandler interface {
 	CheckUser(ctx *gin.Context)
 	GetAvatar(ctx *gin.Context)
 	GetContacts(ctx *gin.Context)
+	SaveContact(ctx *gin.Context)
 	GetPrivacy(ctx *gin.Context)
 	SetPrivacy(ctx *gin.Context)
 	BlockContact(ctx *gin.Context)
