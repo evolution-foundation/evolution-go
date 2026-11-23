@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "api": {
+      "root": "./",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel-api"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": { "service": "api" } }
+  ],
+  "daemons": {
+    "whatsapp": {
+      "root": "./",
+      "entrypoint": "Dockerfile.vercel-daemon",
+      "instances": { "iad1": 1 },
+      "resources": { "requests": { "memory": "2Gi" } },
+      "terminationGracePeriodSeconds": 60
+    }
+  }
+}
