@@ -10,7 +10,6 @@ import (
     "encoding/hex"
     "encoding/json"
     "errors"
-    "fmt"
     "io"
     "log"
     "net/http"
@@ -20,6 +19,7 @@ import (
 
     "github.com/google/uuid"
     _ "github.com/lib/pq"
+    "github.com/evolution-foundation/evolution-go/pkg/vercelbridge"
 )
 
 const maxRequestBytes = 256 << 10
@@ -29,6 +29,7 @@ const waitDuration = 18 * time.Second
 type gateway struct {
     db *sql.DB
     key string
+    tokenKeyHex string
 }
 
 type job struct {
@@ -40,8 +41,10 @@ type job struct {
 }
 
 func main() {
-    key, dsn := os.Getenv("GLOBAL_API_KEY"), os.Getenv("POSTGRES_USERS_DB")
-    if key == "" || dsn == "" { log.Fatal("GLOBAL_API_KEY and POSTGRES_USERS_DB are required") }
+    key, dsn := os.Getenv("BRIDGE_API_KEY"), os.Getenv("POSTGRES_USERS_DB")
+    tokenKeyHex := os.Getenv("BRIDGE_TOKEN_KEY")
+    if key == "" || dsn == "" { log.Fatal("BRIDGE_API_KEY and POSTGRES_USERS_DB are required") }
+    if err := vercelbridge.ValidateTokenKey(tokenKeyHex); err != nil { log.Fatal(err) }
     db, err := sql.Open("postgres", dsn)
     if err != nil { log.Fatal(err) }
     defer db.Close()
@@ -53,7 +56,7 @@ func main() {
     if port == "" { port = "8080" }
     srv := &http.Server{
         Addr: ":"+port,
-        Handler: &gateway{db:db,key:key},
+        Handler: &gateway{db:db,key:key,tokenKeyHex:tokenKeyHex},
         ReadHeaderTimeout: 8*time.Second,
         ReadTimeout: 20*time.Second,
         WriteTimeout: 24*time.Second,
@@ -69,7 +72,7 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         io.WriteString(w, `{"status":"ok","component":"evolution-go-vercel-gateway"}`)
         return
     }
-    if subtle.ConstantTimeCompare([]byte(r.Header.Get("apikey")), []byte(g.key)) != 1 {
+    if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Bridge-Key")), []byte(g.key)) != 1 {
         http.Error(w, "unauthorized", http.StatusUnauthorized)
         return
     }
@@ -97,8 +100,12 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     if err != nil { http.Error(w,"invalid request body",400); return }
     if len(data)>maxRequestBytes { http.Error(w,"request exceeds 256 KiB",413); return }
 
+    authKey:=r.Header.Get("apikey")
+    if authKey=="" || len(authKey)>4096 { http.Error(w,"missing or invalid apikey",401); return }
+    encrypted,err:=vercelbridge.SealAPIKey(authKey,g.tokenKeyHex)
+    if err!=nil { http.Error(w,"bridge key configuration invalid",503); return }
     uri := r.URL.RequestURI()
-    sum:=sha256.Sum256(append([]byte(r.Method+"\n"+uri+"\n"),data...))
+    sum:=sha256.Sum256(append([]byte(r.Method+"\n"+uri+"\n"+authKey+"\n"),data...))
     digest:=hex.EncodeToString(sum[:])
     id:=uuid.New()
     if key := strings.TrimSpace(r.Header.Get("X-Idempotency-Key")); key!="" {
@@ -106,9 +113,9 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         id=uuid.NewSHA1(uuid.NameSpaceOID,[]byte(r.Method+"\n"+uri+"\n"+key))
     }
     _,err=g.db.ExecContext(r.Context(),`
-INSERT INTO evo_bridge.commands (id,method,request_path,request_body,request_sha256)
-VALUES ($1::uuid,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING
-`,id.String(),r.Method,uri,data,digest)
+INSERT INTO evo_bridge.commands (id,method,request_path,request_body,request_sha256,auth_ciphertext)
+VALUES ($1::uuid,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING
+`,id.String(),r.Method,uri,data,digest,encrypted)
     if err!=nil {
         log.Printf("[vercel-api] queue write failed: %v",err)
         http.Error(w,"command queue unavailable",503)
@@ -197,5 +204,3 @@ func allowPath(p string)bool{
     }
     return false
 }
-// Keep fmt reachable for useful build-time diagnostics in this initial module.
-var _ = fmt.Sprintf
