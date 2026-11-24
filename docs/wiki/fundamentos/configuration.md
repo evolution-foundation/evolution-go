@@ -514,7 +514,9 @@ WHATSAPP_VERSION_MINOR=2412
 WHATSAPP_VERSION_PATCH=54
 ```
 
-**Recomendação**: Deixar não configurado para utilizar versão automática da biblioteca whatsmeow.
+**Recomendação**: Deixar não configurado. Na inicialização, o Evolution Go busca a versão atual do WhatsApp Web e a aplica ao handshake (nunca reduzindo a versão em uso). Se a busca falhar, é usada uma versão mínima embutida (`2.3000.1052556849`) em vez da versão padrão da biblioteca whatsmeow, que pode estar desatualizada e causar `Client outdated (405)`.
+
+Quando as três variáveis são definidas, a versão configurada é aplicada ao handshake e tem prioridade sobre a versão buscada.
 
 ---
 
