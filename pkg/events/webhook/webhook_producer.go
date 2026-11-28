@@ -19,6 +19,8 @@ type webhookProducer struct {
 	// durable is set by EnableDurableQueue (WEBHOOK_DURABLE_QUEUE=true). Nil:
 	// the in-memory retry below.
 	durable *durableDelivery
+	// inMemory replaces the in-memory retry in tests; nil runs sendWebhookWithRetry.
+	inMemory func(url string, payload []byte, userID string)
 }
 
 func NewWebhookProducer(
@@ -48,6 +50,10 @@ func (p *webhookProducer) Produce(
 			continue
 		}
 		if p.durable != nil && p.durable.enqueue(url, payload, userID) {
+			continue
+		}
+		if p.inMemory != nil {
+			p.inMemory(url, payload, userID)
 			continue
 		}
 		go p.sendWebhookWithRetry(url, payload, 5, 30*time.Second, userID)

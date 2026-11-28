@@ -9,17 +9,24 @@ package webhook_producer
 // receiver answers 2xx. A background deliverer resumes whatever is still pending,
 // also after a restart, until WEBHOOK_RETENTION (default 72h).
 //
+// Delivery is at-least-once: every POST carries the X-Webhook-Id header (the
+// same value on every attempt of the same event), so the receiver can drop a
+// repeated delivery.
+//
 // Off (the default) nothing changes: no table, no goroutine, same retry as before.
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -35,15 +42,28 @@ const (
 	// defaultWebhookRetryDelays: waits after each failed attempt; after the last
 	// one it repeats until the retention is over (~75 attempts in 72h).
 	defaultWebhookRetryDelays = "5s,15s,1m,5m,15m,1h"
-	// leaseDuration: an attempt that takes longer than this (process died in the
-	// middle) is picked up again by the deliverer.
-	leaseDuration = 2 * time.Minute
-	// keepFinishedFor: refused and expired rows stay this long for diagnosis.
+	// minimumLease: an attempt that takes longer than its lease (process died in
+	// the middle) is picked up again. The lease is never shorter than the HTTP
+	// timeout plus leaseMargin, so a slow request is not sent twice at once.
+	minimumLease = 2 * time.Minute
+	leaseMargin  = 30 * time.Second
+	// keepFinishedFor: refused and expired rows stay this long after they
+	// finished, for diagnosis.
 	keepFinishedFor = 7 * 24 * time.Hour
+	// deliveryBatch and deliveryWorkers: how many due events are read at once and
+	// how many are sent at the same time, so a slow receiver does not hold the rest.
+	deliveryBatch   = 50
+	deliveryWorkers = 8
+	// storeTimeout and queryTimeout: a stalled database returns an error (and the
+	// event goes to the in-memory retry) instead of blocking the caller.
+	storeTimeout = 5 * time.Second
+	queryTimeout = 15 * time.Second
 	// maxLoggedResponseBody caps what goes to the log: the response may echo
 	// message content.
 	maxLoggedResponseBody = 200
 	maxResponseBodyBytes  = 64 * 1024
+
+	webhookIDHeader = "X-Webhook-Id"
 
 	statusPending = "pending"
 	statusRefused = "refused"
@@ -62,6 +82,8 @@ type WebhookPending struct {
 	LeasedUntil *time.Time `gorm:""`
 	LastError   string     `gorm:"type:varchar(300)"`
 	CreatedAt   time.Time  `gorm:"not null;index"`
+	// FinishedAt: when the row became refused or expired (cleanup counts from here).
+	FinishedAt *time.Time `gorm:"index"`
 }
 
 func (WebhookPending) TableName() string { return "webhook_pending" }
@@ -69,15 +91,17 @@ func (WebhookPending) TableName() string { return "webhook_pending" }
 // durableQueue is what the deliverer needs from storage (a fake in unit tests).
 type durableQueue interface {
 	Store(url, userID string, body []byte, now time.Time) (uint, error)
-	// Lease marks the row as being delivered now; false if it is not pending, not
-	// due yet or already leased by someone else.
-	Lease(id uint, now time.Time) (*WebhookPending, bool, error)
+	// Lease marks the row as being delivered until `until`; false if it is not
+	// pending, not due yet, older than notBefore (past the retention) or already
+	// leased by someone else.
+	Lease(id uint, now, until, notBefore time.Time) (*WebhookPending, bool, error)
 	Delivered(id uint) error
-	Refused(id uint, reason string) error
+	Refused(id uint, reason string, now time.Time) error
 	Retry(id uint, attempts int, next time.Time, reason string) error
-	Due(now time.Time, limit int) ([]uint, error)
+	// Due lists pending rows that can be sent now, the longest waiting first.
+	Due(now, notBefore time.Time, limit int) ([]uint, error)
 	// Expire marks pending rows older than retention as expired (returns how many)
-	// and deletes finished rows older than keepFinishedFor.
+	// and deletes finished rows that finished more than keepFinishedFor ago.
 	Expire(now time.Time, retention time.Duration) (int64, error)
 }
 
@@ -87,6 +111,7 @@ type durableDelivery struct {
 	client        *http.Client
 	retryDelays   []time.Duration
 	retention     time.Duration
+	lease         time.Duration
 	now           func() time.Time
 	loggerWrapper *logger_wrapper.LoggerManager
 }
@@ -114,22 +139,28 @@ func EnableDurableQueue(producer producer_interfaces.Producer, db *gorm.DB) erro
 }
 
 func newDurableDelivery(queue durableQueue, loggerWrapper *logger_wrapper.LoggerManager) *durableDelivery {
+	timeout := webhookTimeout()
+	lease := minimumLease
+	if timeout+leaseMargin > lease {
+		lease = timeout + leaseMargin
+	}
 	return &durableDelivery{
 		queue:         queue,
-		client:        &http.Client{Timeout: webhookTimeout()},
+		client:        &http.Client{Timeout: timeout},
 		retryDelays:   webhookRetryDelays(loggerWrapper),
 		retention:     webhookRetention(),
+		lease:         lease,
 		now:           time.Now,
 		loggerWrapper: loggerWrapper,
 	}
 }
 
 // enqueue stores the event and tries it right away. False if it could not be
-// stored (database down): the caller falls back to the in-memory retry.
+// stored (database down or too slow): the caller falls back to the in-memory retry.
 func (d *durableDelivery) enqueue(url string, body []byte, userID string) bool {
 	id, err := d.queue.Store(url, userID, body, d.now())
 	if err != nil {
-		d.logError(userID, "[%s] webhook queue unavailable, retrying in memory: %v", userID, err)
+		d.logError(userID, "[%s] webhook queue unavailable, retrying in memory: %s", userID, redactError(err, url))
 		return false
 	}
 	go d.attempt(id)
@@ -152,10 +183,11 @@ func (d *durableDelivery) delayFor(attempts int) time.Duration {
 	return d.retryDelays[i]
 }
 
-// attempt delivers one stored event once, if it is due and not leased.
+// attempt delivers one stored event once, if it is due, not leased and not past
+// the retention.
 func (d *durableDelivery) attempt(id uint) {
 	now := d.now()
-	row, ok, err := d.queue.Lease(id, now)
+	row, ok, err := d.queue.Lease(id, now, now.Add(d.lease), now.Add(-d.retention))
 	if err != nil {
 		d.logError("webhook", "[webhook] could not lease event %d: %v", id, err)
 		return
@@ -163,34 +195,46 @@ func (d *durableDelivery) attempt(id uint) {
 	if !ok {
 		return
 	}
-	responseBody, statusCode, retryable, err := d.post(row.URL, row.Body)
+	safeURL := withoutSecret(row.URL)
+	responseBody, statusCode, retryable, err := d.post(row.ID, row.URL, row.Body)
+	// The wait counts from the end of the attempt: a slow receiver does not eat it.
+	finished := d.now()
 	if err == nil {
 		if derr := d.queue.Delivered(id); derr != nil {
-			d.logError(row.UserID, "[%s] webhook delivered but not removed from the queue (%d): %v", row.UserID, id, derr)
+			d.logError(row.UserID, "[%s] webhook %d delivered but not removed from the queue (it may be sent again): %v", row.UserID, id, derr)
+			return
 		}
-		d.logInfo(row.UserID, "[%s] webhook sent successfully - url: %s, status: %d, attempt: %d", row.UserID, withoutSecret(row.URL), statusCode, row.Attempts+1)
+		d.logInfo(row.UserID, "[%s] webhook sent successfully - url: %s, status: %d, attempt: %d", row.UserID, safeURL, statusCode, row.Attempts+1)
 		return
 	}
+	reason := redactError(err, row.URL)
 	if !retryable {
-		_ = d.queue.Refused(id, err.Error())
-		d.logError(row.UserID, "[%s] webhook refused (status %d), not retried - url: %s, response: %s", row.UserID, statusCode, withoutSecret(row.URL), truncateForLog(responseBody))
+		if uerr := d.queue.Refused(id, reason, finished); uerr != nil {
+			d.logError(row.UserID, "[%s] webhook %d refused (status %d) but the refusal was not recorded, it will be tried again: %v", row.UserID, id, statusCode, uerr)
+			return
+		}
+		d.logError(row.UserID, "[%s] webhook refused (status %d), not retried - url: %s, response: %s", row.UserID, statusCode, safeURL, truncateForLog(responseBody))
 		return
 	}
 	attempts := row.Attempts + 1
 	wait := d.delayFor(attempts)
-	_ = d.queue.Retry(id, attempts, now.Add(wait), err.Error())
-	d.logWarn(row.UserID, "[%s] webhook failed - url: %s, attempt: %d, status: %d, error: %v, next in %s",
-		row.UserID, withoutSecret(row.URL), attempts, statusCode, err, wait)
+	if uerr := d.queue.Retry(id, attempts, finished.Add(wait), reason); uerr != nil {
+		d.logError(row.UserID, "[%s] webhook %d failed and the next attempt was not recorded (it is tried again when the lease ends): %v", row.UserID, id, uerr)
+		return
+	}
+	d.logWarn(row.UserID, "[%s] webhook failed - url: %s, attempt: %d, status: %d, error: %s, next in %s",
+		row.UserID, safeURL, attempts, statusCode, reason, wait)
 }
 
 // post sends the payload once. retryable is false only for a response a retry
 // cannot fix: 4xx except 408 (timeout) and 429 (rate limited).
-func (d *durableDelivery) post(url string, body []byte) ([]byte, int, bool, error) {
+func (d *durableDelivery) post(id uint, url string, body []byte) ([]byte, int, bool, error) {
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, 0, false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(webhookIDHeader, strconv.FormatUint(uint64(id), 10))
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, 0, true, err
@@ -222,16 +266,32 @@ func (d *durableDelivery) deliverer(stop <-chan struct{}) {
 		case <-expire.C:
 			d.expireOld()
 		case <-tick.C:
-			ids, err := d.queue.Due(d.now(), 50)
-			if err != nil {
-				d.logError("webhook", "[webhook] could not read pending events: %v", err)
-				continue
-			}
-			for _, id := range ids {
-				d.attempt(id)
-			}
+			d.deliverDue()
 		}
 	}
+}
+
+// deliverDue sends one batch of due events, deliveryWorkers at a time, and waits
+// for the batch: a slow receiver holds one worker, not the whole queue.
+func (d *durableDelivery) deliverDue() {
+	now := d.now()
+	ids, err := d.queue.Due(now, now.Add(-d.retention), deliveryBatch)
+	if err != nil {
+		d.logError("webhook", "[webhook] could not read pending events: %v", err)
+		return
+	}
+	workers := make(chan struct{}, deliveryWorkers)
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		workers <- struct{}{}
+		go func(id uint) {
+			defer wg.Done()
+			defer func() { <-workers }()
+			d.attempt(id)
+		}(id)
+	}
+	wg.Wait()
 }
 
 func (d *durableDelivery) expireOld() {
@@ -259,18 +319,27 @@ func newGormQueue(db *gorm.DB) (*gormQueue, error) {
 	return &gormQueue{db: db}, nil
 }
 
+func (q *gormQueue) with(timeout time.Duration) (*gorm.DB, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return q.db.WithContext(ctx), cancel
+}
+
 func (q *gormQueue) Store(url, userID string, body []byte, now time.Time) (uint, error) {
+	db, cancel := q.with(storeTimeout)
+	defer cancel()
 	row := WebhookPending{URL: url, UserID: userID, Body: body, Status: statusPending, NextAt: now, CreatedAt: now}
-	if err := q.db.Create(&row).Error; err != nil {
+	if err := db.Create(&row).Error; err != nil {
 		return 0, err
 	}
 	return row.ID, nil
 }
 
-func (q *gormQueue) Lease(id uint, now time.Time) (*WebhookPending, bool, error) {
-	until := now.Add(leaseDuration)
-	res := q.db.Model(&WebhookPending{}).
-		Where("id = ? AND status = ? AND next_at <= ? AND (leased_until IS NULL OR leased_until < ?)", id, statusPending, now, now).
+func (q *gormQueue) Lease(id uint, now, until, notBefore time.Time) (*WebhookPending, bool, error) {
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
+	res := db.Model(&WebhookPending{}).
+		Where("id = ? AND status = ? AND next_at <= ? AND created_at >= ? AND (leased_until IS NULL OR leased_until < ?)",
+			id, statusPending, now, notBefore, now).
 		Update("leased_until", until)
 	if res.Error != nil {
 		return nil, false, res.Error
@@ -279,43 +348,54 @@ func (q *gormQueue) Lease(id uint, now time.Time) (*WebhookPending, bool, error)
 		return nil, false, nil
 	}
 	var row WebhookPending
-	if err := q.db.First(&row, id).Error; err != nil {
+	if err := db.First(&row, id).Error; err != nil {
 		return nil, false, err
 	}
 	return &row, true, nil
 }
 
 func (q *gormQueue) Delivered(id uint) error {
-	return q.db.Delete(&WebhookPending{}, id).Error
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
+	return db.Delete(&WebhookPending{}, id).Error
 }
 
-func (q *gormQueue) Refused(id uint, reason string) error {
-	return q.db.Model(&WebhookPending{}).Where("id = ?", id).
-		Updates(map[string]interface{}{"status": statusRefused, "last_error": clip(reason), "leased_until": nil}).Error
+func (q *gormQueue) Refused(id uint, reason string, now time.Time) error {
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
+	return db.Model(&WebhookPending{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"status": statusRefused, "last_error": clip(reason), "leased_until": nil, "finished_at": now}).Error
 }
 
 func (q *gormQueue) Retry(id uint, attempts int, next time.Time, reason string) error {
-	return q.db.Model(&WebhookPending{}).Where("id = ?", id).
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
+	return db.Model(&WebhookPending{}).Where("id = ?", id).
 		Updates(map[string]interface{}{"attempts": attempts, "next_at": next, "last_error": clip(reason), "leased_until": nil}).Error
 }
 
-func (q *gormQueue) Due(now time.Time, limit int) ([]uint, error) {
+func (q *gormQueue) Due(now, notBefore time.Time, limit int) ([]uint, error) {
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
 	var ids []uint
-	err := q.db.Model(&WebhookPending{}).
-		Where("status = ? AND next_at <= ? AND (leased_until IS NULL OR leased_until < ?)", statusPending, now, now).
+	err := db.Model(&WebhookPending{}).
+		Where("status = ? AND next_at <= ? AND created_at >= ? AND (leased_until IS NULL OR leased_until < ?)", statusPending, now, notBefore, now).
+		Order(clause.OrderByColumn{Column: clause.Column{Name: "next_at"}}).
 		Order(clause.OrderByColumn{Column: clause.Column{Name: "id"}}).
 		Limit(limit).Pluck("id", &ids).Error
 	return ids, err
 }
 
 func (q *gormQueue) Expire(now time.Time, retention time.Duration) (int64, error) {
-	res := q.db.Model(&WebhookPending{}).
+	db, cancel := q.with(queryTimeout)
+	defer cancel()
+	res := db.Model(&WebhookPending{}).
 		Where("status = ? AND created_at < ?", statusPending, now.Add(-retention)).
-		Updates(map[string]interface{}{"status": statusExpired, "leased_until": nil})
+		Updates(map[string]interface{}{"status": statusExpired, "leased_until": nil, "finished_at": now})
 	if res.Error != nil {
 		return 0, res.Error
 	}
-	err := q.db.Where("status <> ? AND created_at < ?", statusPending, now.Add(-keepFinishedFor)).
+	err := db.Where("status <> ? AND COALESCE(finished_at, created_at) < ?", statusPending, now.Add(-keepFinishedFor)).
 		Delete(&WebhookPending{}).Error
 	return res.RowsAffected, err
 }
@@ -346,7 +426,8 @@ func webhookTimeout() time.Duration {
 }
 
 // webhookRetryDelays reads WEBHOOK_RETRY_DELAYS ("5s,15s,1m,..."). An invalid
-// value falls back to the default and is reported in the log.
+// value (including a zero or negative delay) falls back to the default and is
+// reported in the log.
 func webhookRetryDelays(loggerWrapper *logger_wrapper.LoggerManager) []time.Duration {
 	raw := strings.TrimSpace(os.Getenv("WEBHOOK_RETRY_DELAYS"))
 	if raw == "" {
@@ -375,8 +456,9 @@ func parseRetryDelays(raw string) ([]time.Duration, error) {
 		if err != nil {
 			return nil, err
 		}
-		if d < 0 {
-			return nil, fmt.Errorf("negative delay %q", part)
+		// A zero wait would hammer a receiver that is down.
+		if d <= 0 {
+			return nil, fmt.Errorf("delay %q must be positive", part)
 		}
 		delays = append(delays, d)
 	}
@@ -390,13 +472,37 @@ func clip(s string) string {
 	return s
 }
 
-// withoutSecret drops the query string: receiver URLs often carry a token
-// (?token=...), which must not go to the log.
-func withoutSecret(url string) string {
-	if i := strings.IndexAny(url, "?#"); i >= 0 {
-		return url[:i] + "?…"
+// withoutSecret drops what may carry a credential: the user info
+// (user:password@) and the query string (?token=...).
+func withoutSecret(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		out := u.Scheme + "://" + u.Host + u.EscapedPath()
+		if u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
+			out += "?…"
+		}
+		return out
 	}
-	return url
+	if i := strings.IndexAny(raw, "?#"); i >= 0 {
+		return raw[:i] + "?…"
+	}
+	return raw
+}
+
+// redactError writes the error without the receiver URL's credentials: the Go
+// HTTP client repeats the full URL (query included) in its error message.
+func redactError(err error, rawURL string) string {
+	if err == nil {
+		return ""
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return fmt.Sprintf("%s %q: %v", urlErr.Op, withoutSecret(rawURL), urlErr.Err)
+	}
+	msg := err.Error()
+	if rawURL != "" {
+		msg = strings.ReplaceAll(msg, rawURL, withoutSecret(rawURL))
+	}
+	return msg
 }
 
 // truncateForLog limits what is written to the log: the response body may carry
