@@ -16,6 +16,9 @@ import (
 type webhookProducer struct {
 	url           string
 	loggerWrapper *logger_wrapper.LoggerManager
+	// durable is set by EnableDurableQueue (WEBHOOK_DURABLE_QUEUE=true). Nil:
+	// the in-memory retry below.
+	durable *durableDelivery
 }
 
 func NewWebhookProducer(
@@ -40,11 +43,14 @@ func (p *webhookProducer) Produce(
 		return nil
 	}
 
-	if p.url != "" {
-		go p.sendWebhookWithRetry(p.url, payload, 5, 30*time.Second, userID)
-	}
-	if webhookUrl != "" {
-		go p.sendWebhookWithRetry(webhookUrl, payload, 5, 30*time.Second, userID)
+	for _, url := range []string{p.url, webhookUrl} {
+		if url == "" {
+			continue
+		}
+		if p.durable != nil && p.durable.enqueue(url, payload, userID) {
+			continue
+		}
+		go p.sendWebhookWithRetry(url, payload, 5, 30*time.Second, userID)
 	}
 
 	return nil
