@@ -290,6 +290,33 @@ Eventos serão enviados via POST com payload JSON:
 }
 ```
 
+### WEBHOOK_DURABLE_QUEUE
+
+Entrega durável dos webhooks. Desligada, o comportamento é o de sempre: 5 tentativas com 30 s de
+intervalo, em memória — se o receptor ficar fora por mais de ~2,5 min, ou se o Evolution GO reiniciar
+no meio, o evento se perde.
+
+Ligada, cada evento é gravado no banco de usuários (tabela `webhook_pending`) antes da primeira
+tentativa e apagado quando o receptor responde 2xx. Um entregador em segundo plano retoma os
+pendentes, inclusive depois de reiniciar, até `WEBHOOK_RETENTION`. Resposta 4xx (exceto 408 e 429)
+não é repetida: fica marcada como `refused`. O token na query da URL não vai para o log.
+
+- **Padrão**: `false`
+
+```env
+WEBHOOK_DURABLE_QUEUE=true
+```
+
+Valem só com a fila ligada:
+
+| Variável | Padrão | O que faz |
+|---|---|---|
+| `WEBHOOK_RETRY_DELAYS` | `5s,15s,1m,5m,15m,1h` | Espera depois de cada falha; a última se repete até a retenção. |
+| `WEBHOOK_TIMEOUT_SECONDS` | `10` | Tempo máximo de cada tentativa. |
+| `WEBHOOK_RETENTION` | `72h` | Depois disso o evento é marcado `expired` e não é mais tentado. |
+
+Eventos `refused` e `expired` ficam 7 dias na tabela para diagnóstico e depois são apagados.
+
 ---
 
 ## RabbitMQ (AMQP)

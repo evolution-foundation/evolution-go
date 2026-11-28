@@ -130,6 +130,16 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	}
 
 	webhookProducer := webhook_producer.NewWebhookProducer(config.WebhookUrl, loggerWrapper)
+	// WEBHOOK_DURABLE_QUEUE=true: every event is stored before delivery and
+	// resumed after a restart; if the table cannot be created it falls back to
+	// the in-memory retry.
+	if webhook_producer.DurableQueueEnabled() {
+		if err := webhook_producer.EnableDurableQueue(webhookProducer, db); err != nil {
+			logger.LogError("Durable webhook queue disabled, retrying in memory only: %v", err)
+		} else {
+			logger.LogInfo("Durable webhook queue enabled")
+		}
+	}
 	websocketProducer := websocket_producer.NewWebsocketProducer(loggerWrapper)
 
 	// Cria filas globais se o RabbitMQ global estiver habilitado
